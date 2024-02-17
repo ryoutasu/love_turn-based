@@ -64,7 +64,8 @@ end
 
 function Pathfinder:calculate(start, range, check_blocked, is_melee)
     range = range or nil
-    
+    local actor = BattleState:current_actor()
+
     local reachable = { [start] = true }
     local explored = {}
 
@@ -93,8 +94,9 @@ function Pathfinder:calculate(start, range, check_blocked, is_melee)
                     end
                 end
             end
-        elseif is_melee and (range == nil or gscore[current] <= range + 1) and current.parent.is_open then
-            if start.actor and current.actor and start.actor.is_player ~= current.actor.is_player then
+        elseif is_melee and (range == nil or gscore[current] <= range + 1)
+        and current.parent and current.parent.is_open then
+            if current.actor and actor:enemy_to(current.actor) then
                 current.can_be_selected = true
                 current:change_color()
             end
@@ -104,22 +106,43 @@ end
 
 local abs = math.abs
 function Pathfinder:calculate_range(start, max_range)
+    local actor = BattleState:current_actor()
+    local state = BattleState.state
+
     for _, node in pairs(self.map.tiles._props) do
-        -- if node ~= start then
-            local dx = start.tx - node.tx
-            local dy = start.ty - node.ty
+        local dx = start.tx - node.tx
+        local dy = start.ty - node.ty
 
-            local p = ((odd(start.ty) and even(node.ty) and (start.tx < node.tx))
-                or (odd(node.ty) and even(start.ty) and (node.tx < start.tx)) ) and 1 or 0
+        local p = ((odd(start.ty) and even(node.ty) and (start.tx < node.tx))
+            or (odd(node.ty) and even(start.ty) and (node.tx < start.tx)) ) and 1 or 0
 
-            local range = math.max(abs(dy), abs(dx) + math.floor(abs(dy) / 2) + p)
-            node.range = range
+        local range = math.max(abs(dy), abs(dx) + math.floor(abs(dy) / 2) + p)
+        node.range = range
 
-            if range <= max_range and node.actor and start.actor.is_player ~= node.actor.is_player then
+        if state == 'waiting' then
+            if range <= max_range and node.actor and actor:enemy_to(node.actor) then
                 node.can_be_selected = true
                 node:change_color()
             end
-        -- end
+        end
+
+        if state == 'drawing_path' then
+            if range <= max_range and not node.is_blocked then
+                node.is_open = true
+                node:change_color()
+            else
+                node.is_open = false
+                node:change_color()
+            end
+
+            if range <= max_range+1 and node.actor and actor:enemy_to(node.actor) then
+                node.can_be_selected = true
+                node:change_color()
+            else
+                node.can_be_selected = false
+                node:change_color()
+            end
+        end
     end
 end
 

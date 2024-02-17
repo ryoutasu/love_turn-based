@@ -75,17 +75,29 @@ function BattleState:open_attack_move(actor, node)
     self.pathfinder:calculate_range(node, actor.attack_range)
 end
 
+-- for later
+-- function BattleState:recalculate_path(tile, range)
+--     local actor = self:current_actor()
+--     self.map:reset_nodes()
+
+--     for i, t in ipairs(self.map.drawing_path) do
+--         t.parent = i == 1 and actor.node or self.map.drawing_path[i-1]
+--     end
+
+--     self.pathfinder:calculate(tile, range, false, actor.attack_range == 1, true)
+--     self.pathfinder:calculate_range(tile, 1)
+-- end
+
 function BattleState:start_turn()
     self.queue:start_turn()
-    -- self.UI:update_unit_queue_list(self.queue.awaiting)
-
+    
     local actor = self:current_actor()
     local node = actor.node
     if actor.is_player == true then
         BattleState:open_attack_move(actor, node)
         self.UI:start_turn(actor)
     else
-        self.state = 'acting'
+        self.state = 'ai'
         self.pathfinder:calculate(node, nil, true)
 
         local path_to_target
@@ -148,7 +160,6 @@ function BattleState:start_turn()
             actor:set_current_action(ai_wait)
         end
         self.map:reset_nodes()
-        self.queue:end_turn()
     end
 end
 
@@ -156,14 +167,12 @@ function BattleState:handle_action()
     if self:current_actor().action_new then
         self.map:reset_nodes()
         self.UI:disable()
-        self.queue:end_turn()
     end
     if not self:current_actor().action_completed then return end
+
+    -- self.queue:end_turn()
     
     self:start_turn()
-
-    self.map.highlighted = nil
-    self.map:check_highlight_tile(love.mouse.getPosition())
 end
 
 function BattleState:update(dt)
@@ -171,6 +180,7 @@ function BattleState:update(dt)
     self:handle_action()
 
     self.map:update(dt)
+    -- self:update_drawing_path()
     for i, unit in ipairs(self.units) do
         unit:update(dt)
     end
@@ -188,6 +198,13 @@ end
 function BattleState:mousepressed(x, y, button)
     local actor = self:current_actor()
     if button == 1 then
+        if self.state == 'waiting' then
+            local tile = self.map.highlighted
+            if tile and (tile.actor == actor or tile.is_open) then
+                self.map:start_drawing_path(tile)
+            end
+        end
+
         if self.state == 'spell' then
             local t = self.map.highlighted
             if t and t.can_be_selected then
@@ -199,27 +216,43 @@ function BattleState:mousepressed(x, y, button)
     end
     if button == 2 then
         if --[[ actor.is_player and ]] self.state == 'waiting' then
-            local t = self.map.highlighted
-            if t then
-                if t.is_open then
+            local tile = self.map.highlighted
+            if tile then
+                if tile.is_open then
                     self.state = 'acting'
-                    actor:set_current_action(move, t:get_path(), self.pathfinder)
-                elseif t.can_be_selected then
+                    actor:set_current_action(move, tile:get_path(), self.pathfinder)
+                elseif tile.can_be_selected then
                     self.state = 'acting'
-                    if actor.attack_range == 1 and t.range > 1 then
-                        actor:set_current_action(move, t.parent:get_path(), self.pathfinder, t.actor)
+                    if actor.attack_range == 1 and tile.range > 1 then
+                        actor:set_current_action(move, tile.parent:get_path(), self.pathfinder, tile.actor)
                     else
-                        actor:set_current_action(attack, t.actor)
+                        actor:set_current_action(attack, tile.actor)
                     end
                 end
             end
+        end
+        if self.state == 'drawing_path' then
+            self.map:stop_drawing_path()
         end
     end
     self.u:pressed(x, y, button)
 end
 
+function BattleState:mousereleased(x, y, button)
+    if self.state == 'drawing_path' then
+        local path = self.map.drawing_path
+        if next(path) then
+            self.state = 'acting'
+            local actor = self:current_actor()
+            actor:set_current_action(move, path, self.pathfinder, self.map.last_tile.actor)
+        else
+            self.map:stop_drawing_path()
+        end
+    end
+    self.u:released(x, y)
+end
+
 function BattleState:mousemoved(x, y, dx, dy)
-    self.map:check_highlight_tile(x, y)
     self.u:moved(x, y, dx, dy)
 end
 
@@ -229,10 +262,11 @@ function BattleState:keypressed(key, scancode, isrepeat)
         if self.state == 'spell' then
             self:cancel_target_mode()
         end
+        if self.state == 'drawing_path' then
+            self.map:stop_drawing_path()
+        end
     end
 end
-
-function BattleState:mousereleased(x, y, button) self.u:released(x, y) end
 function BattleState:textinput(text) self.u:textinput(text) end
 function BattleState:wheelmoved(x, y) self.u:wheelmoved(x, y) end
 

@@ -64,6 +64,8 @@ function Map:init(width, height)
     self.height = height
 
     self.highlighted = nil
+    self.entering_tile = nil
+    self.leaving_tile = nil
 end
 
 function Map:reset_nodes()
@@ -84,6 +86,11 @@ function Map:get_height_px()
 end
 
 function Map:update(dt)
+    self.entering_tile = nil
+    self.leaving_tile = nil
+
+    self:check_highlight_tile(love.mouse.getPosition())
+
     for k, t in pairs(self.tiles._props) do
         t:update(dt)
     end
@@ -95,45 +102,159 @@ function Map:draw()
     end
 end
 
-function Map:mousepressed(x, y)
-end
-
 function Map:check_highlight_tile(x, y)
+    -- check if cursor is still inside highlighted tile
     local is_inside = self.highlighted and is_point_inside_hex(x, y, self.highlighted.x, self.highlighted.y) or false
 
     if is_inside then return end
     
-    if BattleState.state == 'waiting' or BattleState.state == 'spell' then
-        if self.highlighted then
+    -- if there is highlighted tile, then cursor left it
+    if self.highlighted then
+        self.leaving_tile = self.highlighted
+
+        if BattleState.state == 'waiting' or BattleState.state == 'spell' then
             self.highlighted:hide_path()
-            self.highlighted = nil
         end
+
+        self.highlighted:unhighlight()
+        self.highlighted = nil
     end
 
-    for k, t in pairs(self.tiles._props) do
-        is_inside = is_point_inside_hex(x, y, t.x, t.y)
+    for i, tile in pairs(self.tiles._props) do
+        is_inside = is_point_inside_hex(x, y, tile.x, tile.y)
         
         if is_inside then
-            t:highlight()
-            if t.is_open then
-                t:show_path()
+            self.highlighted = tile
+            self.entering_tile = tile
+        end
+    end
+    
+    if self.entering_tile then
+        self:cursor_enters_tile(self.entering_tile)
+    end
+end
+
+function Map:cursor_enters_tile(tile)
+    local state = BattleState.state
+    local actor = BattleState:current_actor()
+
+    tile:highlight()
+
+    if state == 'waiting' and tile.is_open then
+        tile:show_path()
+    end
+
+    if (state == 'waiting' or state == 'spell') and tile.can_be_selected then
+        -- if actor is melee, it can move and attack
+        if actor.attack_range == 1 and tile.range > 1 then
+            tile:show_path()
+        end
+        tile:set_animation('select', nil, { 1, 0, 0, 1 })
+    end
+
+    if state == 'drawing_path' then
+        if tile ~= self.last_tile then
+            if tile == actor.node then
+                self.last_tile:hide_path()
+                self:start_drawing_path(tile)
+            else--if tile.is_open or tile.can_be_selected and actor.attack_range == 1 then
+                self:update_drawing_path(tile)
             end
-            if t.can_be_selected then
-                if BattleState:current_actor().attack_range == 1 and t.range > 1 then
-                    t:show_path()
-                end
-                t:set_animation('select', nil , { 1, 0, 0, 1 })
-            end
-            self.highlighted = t
-        elseif t.cursor_inside then
-            t:unhighlight()
         end
     end
 end
 
+function Map:update_drawing_path(tile)
+    -- TODO: use 'calculate' instead of 'calculate_range' to show proper path
+    local actor = BattleState:current_actor()
+    local new_path = {}
+    local cut_path = false
+    local last_tile = BattleState:current_actor().node
+    for _, node in ipairs(self.drawing_path) do
+        if tile == node then
+            self.last_tile:hide_path()
+            cut_path = true
+            break
+        end
+        new_path[#new_path+1] = node
+        last_tile = node
+    end
 
-function Map:mousemoved(x, y, dx, dy)
-    self:check_highlight_tile(x, y)
+    if not (tile.is_open or tile.can_be_selected and actor.attack_range == 1 or cut_path) then
+        return
+    end
+
+    self.drawing_path = new_path
+
+    local movement_range = BattleState:current_actor().movement_range
+    local max_range = movement_range - #new_path - 1
+    if cut_path then
+        tile.parent = last_tile
+        tile:show_path()
+
+        table.insert(self.drawing_path, tile)
+        
+        self.last_tile:set_animation()
+        self.last_tile = tile
+        BattleState.pathfinder:calculate_range(tile, max_range)
+        -- BattleState:recalculate_path(tile, movement_range - #new_path)
+
+        return
+    end
+
+    if self.last_tile.can_be_selected then
+        return
+    end
+
+    if tile.range == 1 and tile.can_be_selected then
+        tile.parent = last_tile
+        tile:show_path()
+        tile:set_animation('select', nil, { 1, 0, 0, 1 })
+
+        self.last_tile:set_animation()
+        self.last_tile = tile
+        BattleState.pathfinder:calculate_range(tile, 0)
+        -- BattleState:recalculate_path(tile, 0)
+
+        return
+    end
+
+    if tile.range == 1 and #new_path < movement_range then
+        tile.parent = last_tile
+        tile:show_path()
+
+        table.insert(self.drawing_path, tile)
+        
+        self.last_tile:set_animation()
+        self.last_tile = tile
+        BattleState.pathfinder:calculate_range(tile, max_range)
+        -- BattleState:recalculate_path(tile, movement_range - #new_path)
+
+        return
+    end
+end
+
+function Map:start_drawing_path(tile)
+    BattleState.state = 'drawing_path'
+    self.drawing_path = {}
+    if tile.is_open then
+        local path = tile:get_path()
+        for _, t in ipairs(path) do
+            table.insert(self.drawing_path, t)
+        end
+    end
+    self.last_tile = tile
+    
+    local movement_range = BattleState:current_actor().movement_range
+    local max_range = movement_range - #self.drawing_path
+    BattleState.pathfinder:calculate_range(tile, max_range)
+    -- BattleState:recalculate_path(tile, max_range)
+end
+
+function Map:stop_drawing_path()
+    self.last_tile:hide_path()
+    BattleState:cancel_target_mode()
+    self.drawing_path = {}
 end
 
 return Map

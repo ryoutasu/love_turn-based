@@ -28,7 +28,6 @@ function UI:init(urutora, x, y)
         text = 'Cancel'
     })
     cancelButton:action(function(e)
-        -- BattleState:current_actor():set_current_action(skip)
         BattleState:cancel_target_mode()
         self:show_cancel_button(false)
     end)
@@ -43,14 +42,6 @@ function UI:init(urutora, x, y)
         cellHeight = h/2
     })
 
-    -- local queuePanel = Urutora.panel({
-    --     x = self.queue_list_x, y = self.queue_list_y,
-    --     w = w - 1, h = h,
-    --     rows = 1, cols = 1,
-    --     csy = 20,
-    --     outline = true
-    -- })
-
     skipButton:disable()
     cancelButton:disable()
     spellPanel:disable()
@@ -58,72 +49,12 @@ function UI:init(urutora, x, y)
     self.u:add(skipButton)
     self.u:add(cancelButton)
     self.u:add(spellPanel)
-    -- self.u:add(queuePanel)
     
     self.skipButton = skipButton
     self.cancelButton = cancelButton
     self.spellPanel = spellPanel
-    -- self.queuePanel = queuePanel
 
     self.awaiting = {}
-end
-
-function UI:clear_unit_list()
-    for i, unit in ipairs(self.awaiting) do
-        self.u:remove(unit.text)
-    end
-    self.awaiting = {}
-end
-
-function UI:create_unit_queue_list(awaiting_list)
-    -- self:clear_unit_list()
-
-    local x = self.queue_list_x
-    local y = self.queue_list_y
-    -- local queuePanel = self.queuePanel
-    self.awaiting = {}
-    self.next = {}
-
-    for i, unit in ipairs(awaiting_list) do
-        local text = Urutora.label({
-            text = unit.name,
-            textAlign = 'left',
-            x = x, y = y + 1,
-            w = 50, h = 20,
-            outline = i == 1
-        })
-
-        local u = {
-            unit = unit,
-            text = text
-        }
-
-        self.u:add(text)
-        table.insert(self.awaiting, u)
-
-        y = y + 25
-    end
-end
-
-function UI:update_unit_queue_list(awaiting_list)
-    if not next(self.awaiting) then
-        self:create_unit_queue_list(awaiting_list)
-        return
-    end
-
-    for i, v in ipairs(self.awaiting) do
-        local unit = v.unit
-        local exists = false
-        for _, u in ipairs(awaiting_list) do
-            if unit == u then
-                exists = true
-            end
-        end
-        
-        if not exists then
-            
-        end
-    end
 end
 
 function UI:start_turn(actor)

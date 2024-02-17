@@ -75,6 +75,14 @@ function Unit:get_spells()
     return self.spells
 end
 
+function Unit:ally_to(unit)
+    return self.is_player == unit.is_player
+end
+
+function Unit:enemy_to(unit)
+    return not self.is_player == unit.is_player
+end
+
 function Unit:update(dt)
     self.action_new = false
     self.action_completed = false

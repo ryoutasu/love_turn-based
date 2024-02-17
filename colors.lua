@@ -7,6 +7,7 @@ COLOR_ID = {
     BLUE = 6,
     RED = 7,
     BRIGHT_RED = 8,
+    BRIGHT_YELLOW = 9,
 }
 
 TILE_COLOR = {
@@ -18,6 +19,7 @@ TILE_COLOR = {
     [COLOR_ID.BLUE] = { 65/255, 65/255, 153/255, 0.6 },
     [COLOR_ID.RED] = { 153/255, 65/255, 65/255, 0.6 },
     [COLOR_ID.BRIGHT_RED] = { 200/255, 65/255, 65/255, 0.6 },
+    [COLOR_ID.BRIGHT_YELLOW] = Urutora.utils.brighter({ 153/255, 153/255, 80/255, 0.6 }),
 }
 
 OUTLINE_COLOR = {
@@ -29,4 +31,5 @@ OUTLINE_COLOR = {
     [COLOR_ID.BLUE] = { 35/255, 35/255, 85/255, 1 },
     [COLOR_ID.RED] = { 85/255, 35/255, 35/255, 1 },
     [COLOR_ID.BRIGHT_RED] = { 100/255, 35/255, 35/255, 1 },
+    [COLOR_ID.BRIGHT_YELLOW] = { 85/255, 85/255, 45/255, 1 },
 }

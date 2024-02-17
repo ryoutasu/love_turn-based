@@ -28,37 +28,63 @@ function Tile:init(x, y, tx, ty, cost)
     self:change_color()
 end
 
+function Tile:reset()
+    self.parent = nil
+    self.is_open = false
+    self.acting = false
+    self.can_be_selected = false
+    self.range = nil
+    self:change_color()
+end
+
 function Tile:change_color()
-    if self.is_open and self.cursor_inside then
-        self.color = COLOR_ID.YELLOW
+    -- if self.is_open and self.cursor_inside then
+    --     self.color_id = COLOR_ID.BRIGHT_YELLOW
 
-    elseif self.is_open then
-        self.color = COLOR_ID.YELLOW
+    -- elseif self.is_open then
+    --     self.color_id = COLOR_ID.YELLOW
 
-    elseif self.acting and self.cursor_inside then
-        self.color = COLOR_ID.LIGHT_GREEN
+    -- elseif self.acting and self.cursor_inside then
+    --     self.color_id = COLOR_ID.LIGHT_GREEN
 
-    elseif self.acting then
-        self.color = COLOR_ID.GREEN
+    -- elseif self.acting then
+    --     self.color_id = COLOR_ID.GREEN
 
-    elseif self.can_be_selected and self.cursor_inside then
-        self.color = COLOR_ID.RED
+    -- elseif self.can_be_selected and self.cursor_inside then
+    --     self.color_id = COLOR_ID.RED
         
-    elseif self.can_be_selected then
-        self.color = COLOR_ID.BRIGHT_RED
+    -- elseif self.can_be_selected then
+    --     self.color_id = COLOR_ID.BRIGHT_RED
 
+    -- else
+    --     if self.cursor_inside then
+    --         self.color_id = COLOR_ID.DARK_GREY
+    --     else
+    --         self.color_id = COLOR_ID.TRANSPARENT_GREY
+    --     end
+    -- end
+    
+    local color
+    if self.is_open then
+        color = TILE_COLOR[COLOR_ID.YELLOW]
+    elseif self.acting then
+        color = TILE_COLOR[COLOR_ID.GREEN]
+    elseif self.can_be_selected then
+        color = TILE_COLOR[COLOR_ID.BRIGHT_RED]
     else
-        if self.cursor_inside then
-            self.color = COLOR_ID.DARK_GREY
-        else
-            self.color = COLOR_ID.TRANSPARENT_GREY
-        end
+        color = TILE_COLOR[COLOR_ID.TRANSPARENT_GREY]
+    end
+
+    if self.cursor_inside then
+        self.color = Urutora.utils.brighter(color, 0.35)
+    else
+        self.color = color
     end
 end
 
 function Tile:open_to_move()
     self.is_open = true
-    if BattleState.state == 'waiting' then
+    if BattleState.state == 'waiting' or BattleState.state == 'drawing_path' then
         self:change_color()
     end
 end
@@ -70,15 +96,6 @@ end
 
 function Tile:unhighlight()
     self.cursor_inside = false
-    self:change_color()
-end
-
-function Tile:reset()
-    self.parent = nil
-    self.is_open = false
-    self.acting = false
-    self.can_be_selected = false
-    self.range = nil
     self:change_color()
 end
 
@@ -151,20 +168,20 @@ end
 function Tile:draw()
     local x, y = self.x, self.y
     local points = get_hex_points(x, y)
-    local color = TILE_COLOR[self.color]
+    -- local color = TILE_COLOR[self.color_id]
 
+    local color = self.color
     love.graphics.setColor(color)
     love.graphics.polygon('fill', points)
-    color = OUTLINE_COLOR[self.color]
+    -- color = OUTLINE_COLOR[self.color_id]
 
+    color = Urutora.utils.darker(color, 0.75)
     love.graphics.setColor(color)
     love.graphics.polygon('line', points)
 
-    -- if self.as_path == 'first' then
     if self.animation then
         self.animation:draw()
     end
-    -- end
 
     if self.as_path == true then
         local s = self.path_sprite

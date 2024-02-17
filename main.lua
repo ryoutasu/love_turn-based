@@ -1,10 +1,10 @@
-require 'colors'
 Class = require 'lib.class'
 Gamestate = require 'lib.gamestate'
 Vector = require 'lib.vector'
 Urutora = require 'lib.urutora'
 Tagtext = require 'src.tagtext'()
 Particles = require 'src.particles'()
+require 'colors'
 -- Input = require 'lib.input'
 
 BattleState = require 'src.states.battlestate'
