@@ -78,9 +78,8 @@ function Fireball:update(dt)
     
     particle.toRemove = true
 
-    Tagtext:add('-15', self.target.x + 5, self.target.y - 40, 2, 30, { 1, 1, 1 })
+    self.target:take_damage(self.caster, 15)
     
-    self.target.health = self.target.health - 15
     return true
 end
 

@@ -25,15 +25,18 @@ function Tile:init(x, y, tx, ty, cost)
     self.path_sprite_rotation = 0
     self.can_be_selected = false
     self.range = nil
+    self.show_as_range = false
     self:change_color()
 end
 
 function Tile:reset()
     self.parent = nil
+    self.drawing_path_parent = nil
     self.is_open = false
     self.acting = false
     self.can_be_selected = false
     self.range = nil
+    self.show_as_range = false
     self:change_color()
 end
 
@@ -65,10 +68,14 @@ function Tile:change_color()
     -- end
     
     local color
-    if self.is_open then
-        color = TILE_COLOR[COLOR_ID.YELLOW]
-    elseif self.acting then
-        color = TILE_COLOR[COLOR_ID.GREEN]
+    if self.is_open and self.show_as_range then
+        color = TILE_COLOR[COLOR_ID.SHADE_DARK_GREEN]
+    elseif self.is_open then
+        color = TILE_COLOR[COLOR_ID.SHADE_GREEN]
+    elseif self.show_as_range then
+        color = TILE_COLOR[COLOR_ID.SHADE_LIGHT_BLUE]
+    -- elseif self.acting then
+    --     color = TILE_COLOR[COLOR_ID.GREEN]
     elseif self.can_be_selected then
         color = TILE_COLOR[COLOR_ID.BRIGHT_RED]
     else
@@ -126,6 +133,8 @@ end
 
 function Tile:show_path(first)
     if self.parent then
+        -- if self.parent == self then print('ABORT!'); return end
+        -- if self.parent.parent == self then print('ABORT! 2'); return end
         self.parent:set_path_sprite_direction(self)
         self.as_path = first or 'first'
         if not first then
@@ -139,6 +148,8 @@ function Tile:hide_path()
     self.as_path = false
     self:set_animation()
     if self.parent then
+        -- if self.parent == self then print('ABORT!'); return end
+        -- if self.parent.parent == self then print('ABORT! 2'); return end
         self.parent:hide_path()
     end
 end
@@ -193,6 +204,12 @@ function Tile:draw()
     --     love.graphics.setColor(0, 0, 0, 1)
     --     love.graphics.setNewFont(12)
     --     love.graphics.print(self.range, self.x, self.y)
+    -- end
+    -- if self.parent then
+    --     love.graphics.setColor(0, 0, 0, 1)
+    --     love.graphics.setNewFont(12)
+    --     love.graphics.print(tostring(self.tx..'/'..self.ty), self.x-8, self.y-12)
+    --     love.graphics.print(tostring('p='..self.parent.tx..'/'..self.parent.ty), self.x-20, self.y)
     -- end
 end
 

@@ -13,6 +13,8 @@ function Attack:init(actor, target)
     self.tween = tween.new(attack_time, actor, { x = target.x, y = target.y }, 'inBack')
     self.attacking = true
     target.node.can_be_attacked = false
+
+    Tagtext:add('Attack', self.actor.x - 25, self.actor.y - 40, 2, 30, { 1, 1, 1 })
 end
 
 function Attack:update(dt)
@@ -22,9 +24,8 @@ function Attack:update(dt)
     if self.attacking then
         self.tween = tween.new(back_time, self.actor, { x = self.actor.node.x, y = self.actor.node.y }, 'outSine')
         self.attacking = false
-        Tagtext:add('-'..self.actor.damage, self.actor.x + 5, self.actor.y - 40, 2, 30, { 1, 1, 1 })
 
-        self.target.health = self.target.health - self.actor.damage
+        self.target:take_damage(self.caster, self.actor.damage)
     else
         self.target.node:set_animation()
         return true

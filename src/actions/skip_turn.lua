@@ -6,6 +6,8 @@ Skip.name = 'Skip'
 
 function Skip:init(actor)
     action.init(self, actor)
+    
+    Tagtext:add('Skip', self.actor.x - 25, self.actor.y - 40, 2, 30, { 1, 1, 1 })
 end
 
 function Skip:update(dt)

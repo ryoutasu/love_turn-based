@@ -10,18 +10,18 @@ local function odd(num)
 end
 
 local neighbors_offset_even = {
-    { 0, -1 },  -- up
     { -1, 0 },  -- left
     { 1,  0 },  -- right
+    { 0, -1 },  -- up
     { 0,  1 },  -- down
     { 1,  1 },  -- up-right
     { 1, -1 }   -- down-right
 }
 
 local neighbors_offset_odd = {
-    { 0, -1 },  -- up
     { -1, 0 },  -- left
     { 1,  0 },  -- right
+    { 0, -1 },  -- up
     { 0,  1 },  -- down
     { -1, 1 },  -- up-left
     { -1, -1 }, -- down-left
@@ -37,7 +37,7 @@ end
 function Pathfinder:get_neighbors(node)
     local nodes = {}
     local x, y = node.tx, node.ty
-    local neighbors_offset = y % 2 == 0 and neighbors_offset_even or neighbors_offset_odd
+    local neighbors_offset = even(y) and neighbors_offset_even or neighbors_offset_odd
     for i, offset in ipairs(neighbors_offset) do
         local tnode = self.map:get_node(x + offset[1], y + offset[2])
         if tnode and tnode.cost ~= 0
@@ -127,13 +127,13 @@ function Pathfinder:calculate_range(start, max_range)
         end
 
         if state == 'drawing_path' then
-            if range <= max_range and not node.is_blocked then
-                node.is_open = true
-                node:change_color()
-            else
-                node.is_open = false
-                node:change_color()
-            end
+            -- if range <= max_range and not node.is_blocked then
+            --     node.is_open = true
+            --     node:change_color()
+            -- else
+            --     node.is_open = false
+            --     node:change_color()
+            -- end
 
             if range <= max_range+1 and node.actor and actor:enemy_to(node.actor) then
                 node.can_be_selected = true

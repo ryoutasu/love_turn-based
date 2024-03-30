@@ -1,7 +1,7 @@
 local map = require 'src.map'
 local pathfinder = require 'src.pathfinder'
 local queue = require 'src.actorQueue'
-local ui = require 'src.ui'
+local panel = require 'src.commandPanel'
 
 local move = require 'src.actions.move'
 local attack = require 'src.actions.attack'
@@ -13,18 +13,18 @@ local unit_def = require 'resources.unit_definition'
 local BattleState = {}
 
 function BattleState:init()
-    self.map = map(20, 9)
+    self.map = map(9, 5)
     self.pathfinder = pathfinder(self.map)
     self.u = Urutora:new()
-    self.UI = ui(self.u, 15, self.map:get_height_px())
-    self.queue = queue(self.u, 230, self.map:get_height_px())
+    self.panel = panel(self.u, 15, love.graphics.getHeight() - 210)
+    self.queue = queue(self.u, 230, love.graphics.getHeight() - 210)
 
     self.units = {}
     self.state = 'none'
-    
-    self:add_unit(4, 3, 'Alice', true)
-    self:add_unit(2, 2, 'Cat', true)
-    self:add_unit(18, 7, 'Bat', false)
+
+    self:add_unit(2, 2, 'Alice', true)
+    -- self:add_unit(1, 1, 'Cat', true)
+    self:add_unit(3, 2, 'Bat', false)
 
     self:start_turn()
 end
@@ -58,7 +58,7 @@ function BattleState:set_target_mode(current_spell)
     end
 
     self.state = 'spell'
-    self.UI:show_cancel_button(true)
+    self.panel:show_cancel_button(true)
 end
 
 function BattleState:cancel_target_mode()
@@ -71,22 +71,27 @@ end
 
 function BattleState:open_attack_move(actor, node)
     self.state = 'waiting'
+
     self.pathfinder:calculate(node, actor.movement_range, false, actor.attack_range == 1)
     self.pathfinder:calculate_range(node, actor.attack_range)
+    
+    -- if self.map.highlighted and not self.map.highlighted.actor.is_player then
+    --     self.map:cursor_enters_tile(self.map.highlighted)
+    -- end
 end
 
--- for later
--- function BattleState:recalculate_path(tile, range)
---     local actor = self:current_actor()
---     self.map:reset_nodes()
+function BattleState:recalculate_path(tile, range)
+    local actor = self:current_actor()
+    self.map:reset_nodes()
 
---     for i, t in ipairs(self.map.drawing_path) do
---         t.parent = i == 1 and actor.node or self.map.drawing_path[i-1]
---     end
+    self.pathfinder:calculate(tile, range, false, actor.attack_range == 1)
+    self.pathfinder:calculate_range(tile, 1)
 
---     self.pathfinder:calculate(tile, range, false, actor.attack_range == 1, true)
---     self.pathfinder:calculate_range(tile, 1)
--- end
+    for i, t in ipairs(self.map.drawing_path) do
+        t.parent = i == 1 and actor.node or self.map.drawing_path[i-1]
+    end
+    actor.node.parent = nil
+end
 
 function BattleState:start_turn()
     self.queue:start_turn()
@@ -95,7 +100,7 @@ function BattleState:start_turn()
     local node = actor.node
     if actor.is_player == true then
         BattleState:open_attack_move(actor, node)
-        self.UI:start_turn(actor)
+        self.panel:start_turn(actor)
     else
         self.state = 'ai'
         self.pathfinder:calculate(node, nil, true)
@@ -166,7 +171,7 @@ end
 function BattleState:handle_action()
     if self:current_actor().action_new then
         self.map:reset_nodes()
-        self.UI:disable()
+        self.panel:disable()
     end
     if not self:current_actor().action_completed then return end
 
@@ -189,9 +194,21 @@ end
 
 function BattleState:draw()
     self.map:draw()
-    for i, u in ipairs(self.units) do
-        u:draw()
+
+    for _, unit in ipairs(self.units) do
+        unit:draw()
     end
+    
+    for _, unit in ipairs(self.units) do
+        if unit.current_action then
+            unit.current_action:draw()
+        end
+    end
+    
+    for _, unit in ipairs(self.units) do
+        unit:draw_health(unit.x, unit.y)
+    end
+
     self.u:draw()
 end
 
@@ -210,7 +227,7 @@ function BattleState:mousepressed(x, y, button)
             if t and t.can_be_selected then
                 self.state = 'acting'
                 actor:set_current_action(spell, self.current_spell, t)
-                self.UI:show_cancel_button(false)
+                self.panel:show_cancel_button(false)
             end
         end
     end
@@ -218,6 +235,7 @@ function BattleState:mousepressed(x, y, button)
         if --[[ actor.is_player and ]] self.state == 'waiting' then
             local tile = self.map.highlighted
             if tile then
+
                 if tile.is_open then
                     self.state = 'acting'
                     actor:set_current_action(move, tile:get_path(), self.pathfinder)

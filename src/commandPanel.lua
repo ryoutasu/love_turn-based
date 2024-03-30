@@ -1,7 +1,7 @@
-local UI = Class{}
+local CommandPanel = Class{}
 local skip = require 'src.actions.skip_turn'
 
-function UI:init(urutora, x, y)
+function CommandPanel:init(urutora, x, y)
     self.x = x
     self.y = y
     self.u = urutora
@@ -57,7 +57,7 @@ function UI:init(urutora, x, y)
     self.awaiting = {}
 end
 
-function UI:start_turn(actor)
+function CommandPanel:start_turn(actor)
     self.skipButton:enable()
     self.spellPanel:enable()
     self.spellPanel:clear()
@@ -76,25 +76,25 @@ function UI:start_turn(actor)
     self.spellPanel:setScrollY(0)
 end
 
-function UI:end_turn()
+function CommandPanel:end_turn()
     
 end
 
-function UI:show_cancel_button(show)
+function CommandPanel:show_cancel_button(show)
     self.skipButton:setEnabled(not show):setVisible(not show)
     self.cancelButton:setEnabled(show):setVisible(show)
 end
 
-function UI:disable()
+function CommandPanel:disable()
     self.cancelButton:hide():disable()
     self.skipButton:disable()
     self.spellPanel:disable()
 end
 
-function UI:clear()
+function CommandPanel:clear()
     if self.cancelButton then self.u:remove(self.cancelButton) end
     if self.skipButton then self.u:remove(self.skipButton) end
     if self.spellPanel then self.u:remove(self.spellPanel) end
 end
 
-return UI
+return CommandPanel

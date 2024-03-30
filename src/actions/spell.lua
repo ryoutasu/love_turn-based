@@ -12,6 +12,8 @@ function Spell:init(actor, spell, target)
 
     self.target = target
     self.spell = spell(actor, target)
+    
+    Tagtext:add(spell.name, self.actor.x - 25, self.actor.y - 40, 2, 30, { 1, 1, 1 })
 end
 
 function Spell:update(dt)

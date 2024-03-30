@@ -83,6 +83,11 @@ function Unit:enemy_to(unit)
     return not self.is_player == unit.is_player
 end
 
+function Unit:take_damage(source, damage, type)
+    Tagtext:add('-'..damage, self.x + 5, self.y - 40, 2, 30, { 1, 0, 0 })
+    self.health = self.health - damage
+end
+
 function Unit:update(dt)
     self.action_new = false
     self.action_completed = false
@@ -137,11 +142,11 @@ function Unit:draw()
     love.graphics.setColor(1, 1, 1, 1)
     self.sprite:draw(self.quad, x, y, 0, 1, 1, self.w*0.5, self.h*0.5)
     
-    if self.current_action then
-        self.current_action:draw()
-    end
+    -- if self.current_action then
+    --     self.current_action:draw()
+    -- end
 
-    self:draw_health(x, y)
+    -- self:draw_health(x, y)
 end
 
 return Unit
