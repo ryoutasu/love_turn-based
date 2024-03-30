@@ -22,8 +22,8 @@ function BattleState:init()
     self.units = {}
     self.state = 'none'
 
+    self:add_unit(1, 1, 'Cat', true)
     self:add_unit(2, 2, 'Alice', true)
-    -- self:add_unit(1, 1, 'Cat', true)
     self:add_unit(3, 2, 'Bat', false)
 
     self:start_turn()
