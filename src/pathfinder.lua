@@ -1,5 +1,4 @@
 local inf = 1/0
--- local default_range = 10
 
 local function even(num)
     return num % 2 == 0

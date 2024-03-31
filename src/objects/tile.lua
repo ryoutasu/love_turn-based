@@ -26,6 +26,7 @@ function Tile:init(x, y, tx, ty, cost)
     self.can_be_selected = false
     self.range = nil
     self.show_as_range = false
+    self.aoe_target = false
     self:change_color()
 end
 
@@ -37,6 +38,7 @@ function Tile:reset()
     self.can_be_selected = false
     self.range = nil
     self.show_as_range = false
+    self.aoe_target = false
     self:change_color()
 end
 
@@ -70,7 +72,7 @@ function Tile:change_color()
     local color
     if self.is_open and self.show_as_range then
         color = TILE_COLOR[COLOR_ID.SHADE_DARK_GREEN]
-    elseif self.is_open then
+    elseif self.is_open or self.aoe_target then
         color = TILE_COLOR[COLOR_ID.SHADE_GREEN]
     elseif self.show_as_range then
         color = TILE_COLOR[COLOR_ID.SHADE_LIGHT_BLUE]

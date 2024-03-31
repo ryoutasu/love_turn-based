@@ -124,6 +124,7 @@ function Map:check_highlight_tile(x, y)
 
     for i, tile in pairs(self.tiles._props) do
         tile.cursor_inside = false
+        tile.aoe_target = false
 
         is_inside = is_point_inside_hex(x, y, tile.x, tile.y)
         
@@ -134,11 +135,6 @@ function Map:check_highlight_tile(x, y)
 
         tile:change_color()
     end
-    
-    if self.entering_tile then
-        -- print('Entering tile '..self.entering_tile.tx..'/'..self.entering_tile.ty)
-        self:cursor_enters_tile(self.entering_tile)
-    end
 
     if self.leaving_tile then
         -- print('Leaving tile '..self.leaving_tile.tx..'/'..self.leaving_tile.ty)
@@ -146,6 +142,11 @@ function Map:check_highlight_tile(x, y)
             self.showing_range = false
             BattleState:cancel_target_mode()
         end
+    end
+    
+    if self.entering_tile then
+        -- print('Entering tile '..self.entering_tile.tx..'/'..self.entering_tile.ty)
+        self:cursor_enters_tile(self.entering_tile)
     end
 end
 
@@ -165,6 +166,29 @@ function Map:cursor_enters_tile(tile)
             tile:show_path()
         end
         tile:set_animation('select', nil, { 1, 0, 0, 1 })
+        
+        local current_spell = BattleState.current_spell
+        if current_spell and current_spell.type == 'AOE' then
+            local selectable = {}
+            
+            self:reset_nodes()
+            BattleState.pathfinder:calculate_range(tile, current_spell.radius)
+            
+            for _, node in pairs(self.tiles._props) do
+                if node.range <= current_spell.radius then
+                    selectable[#selectable+1] = node
+                end
+            end
+
+            BattleState:set_target_mode(current_spell)
+
+            for _, node in ipairs(selectable) do
+                node.aoe_target = true
+                node:change_color()
+            end
+            
+            self.highlighted = tile
+        end
     end
     
     if state == 'waiting' and tile.actor and tile.actor ~= actor then

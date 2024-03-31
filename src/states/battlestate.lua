@@ -21,6 +21,7 @@ function BattleState:init()
 
     self.units = {}
     self.state = 'none'
+    self.current_spell = nil
 
     self:add_unit(1, 1, 'Cat', true)
     self:add_unit(2, 2, 'Alice', true)
@@ -62,6 +63,7 @@ function BattleState:set_target_mode(current_spell)
 end
 
 function BattleState:cancel_target_mode()
+    self.current_spell = nil
     self.map:reset_nodes()
 
     local actor = self:current_actor()

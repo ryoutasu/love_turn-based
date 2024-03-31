@@ -4,6 +4,7 @@ local sprite = require 'src.sprite'
 local fireball = require 'src.spells.fireball'
 local healing = require 'src.spells.healing'
 local slash = require 'src.spells.slash'
+local earthquake = require 'src.spells.earthquake'
 
 ---Unit
 ---@param node table
@@ -29,6 +30,7 @@ return {
     ['Alice'] = function (node, is_player, ...)
         local u = create_unit(node, 'resources/alice.png', 32, 48, 96, 192, is_player, 100, 10, 1, 4, 6)
         u.name = 'Alice'
+        u:add_spell(earthquake)
         u:add_spell(slash)
         return u
     end,
