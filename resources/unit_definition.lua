@@ -30,7 +30,6 @@ return {
     ['Alice'] = function (node, is_player, ...)
         local u = create_unit(node, 'resources/alice.png', 32, 48, 96, 192, is_player, 100, 10, 1, 4, 6)
         u.name = 'Alice'
-        u:add_spell(earthquake)
         u:add_spell(slash)
         return u
     end,
@@ -38,6 +37,7 @@ return {
         local u = create_unit(node, 'resources/cat.png', 64, 64, 64, 64, is_player, 80, 5, 3, 2, 3)
         u.name = 'Cat'
         u:add_spell(fireball)
+        u:add_spell(earthquake)
         u:add_spell(healing)
         return u
     end,

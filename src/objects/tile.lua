@@ -27,6 +27,8 @@ function Tile:init(x, y, tx, ty, cost)
     self.range = nil
     self.show_as_range = false
     self.aoe_target = false
+    self.borders = { false, false, false, false, false, false }
+    
     self:change_color()
 end
 
@@ -39,6 +41,8 @@ function Tile:reset()
     self.range = nil
     self.show_as_range = false
     self.aoe_target = false
+    self.borders = { false, false, false, false, false, false }
+
     self:change_color()
 end
 
@@ -178,6 +182,23 @@ local function get_hex_points(x, y)
     return points
 end
 
+local function get_borders_points(x, y, n)
+    local points = {}
+
+    for i = n, n + 1 do
+        local angle_deg = 60 * i + 30
+		local angle_rad = math.pi / 180 * angle_deg
+
+		local px = x + (HEX_RADIUS + HEX_OFFSET_X/2) * math.cos(angle_rad)
+		local py = y + (HEX_RADIUS + HEX_OFFSET_Y/2) * math.sin(angle_rad)
+
+        table.insert(points, px)
+        table.insert(points, py)
+    end
+
+    return points
+end
+
 function Tile:draw()
     local x, y = self.x, self.y
     local points = get_hex_points(x, y)
@@ -188,9 +209,18 @@ function Tile:draw()
     love.graphics.polygon('fill', points)
     -- color = OUTLINE_COLOR[self.color_id]
 
-    color = Urutora.utils.darker(color, 0.75)
+    color = Urutora.utils.darker(color, 1)
     love.graphics.setColor(color)
     love.graphics.polygon('line', points)
+
+    for i, value in ipairs(self.borders) do
+        if value then
+            points = get_borders_points(x, y, i)
+            
+            love.graphics.setColor(1, 0, 0, 1)
+            love.graphics.line(points)
+        end
+    end
 
     if self.animation then
         self.animation:draw()
@@ -213,6 +243,9 @@ function Tile:draw()
     --     love.graphics.print(tostring(self.tx..'/'..self.ty), self.x-8, self.y-12)
     --     love.graphics.print(tostring('p='..self.parent.tx..'/'..self.parent.ty), self.x-20, self.y)
     -- end
+    -- love.graphics.setColor(0, 0, 0, 1)
+    -- love.graphics.setNewFont(12)
+    -- love.graphics.print(tostring(self.tx..'/'..self.ty), self.x-8, self.y-6)
 end
 
 return Tile

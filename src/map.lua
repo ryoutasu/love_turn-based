@@ -6,13 +6,13 @@ local Map = Class{}
 local startx = 64
 local starty = 64
 
-local offsetx = 4
-local offsety = 4
+HEX_OFFSET_X = 4
+HEX_OFFSET_Y = 4
 
 HEX_RADIUS = 32
 
 local function is_point_inside_hex(x, y, cx, cy)
-    local z = HEX_RADIUS + offsetx;
+    local z = HEX_RADIUS + HEX_OFFSET_X;
     local px = math.abs(x - cx);
     local py = math.abs(y - cy);
 
@@ -41,10 +41,10 @@ local function grid_to_world(x, y)
     local height = 2*HEX_RADIUS
     local width = (math.sqrt(3)/2)*height
 
-    local worldx = (width * (x-1)) + (offsetx * (x-1)) + startx
-    local worldy = (height * 3/4 * (y-1)) + (offsety * (y-1)) + starty
+    local worldx = (width * (x-1)) + (HEX_OFFSET_X * (x-1)) + startx
+    local worldy = (height * 3/4 * (y-1)) + (HEX_OFFSET_Y * (y-1)) + starty
 
-    if y % 2 == 0 then worldx = worldx + width/2 + offsetx/2 end
+    if y % 2 == 0 then worldx = worldx + width/2 + HEX_OFFSET_X/2 end
 
     return worldx, worldy
 end
@@ -84,7 +84,7 @@ end
 
 function Map:get_height_px()
     local r = HEX_RADIUS * 2 * 3/4
-    return starty + self.height * r + (self.height - 1) * offsety
+    return starty + self.height * r + (self.height - 1) * HEX_OFFSET_Y
 end
 
 function Map:update(dt)

@@ -9,21 +9,21 @@ local function odd(num)
 end
 
 local neighbors_offset_even = {
-    { -1, 0 },  -- left
+    { 1, -1 },   -- top-right
     { 1,  0 },  -- right
-    { 0, -1 },  -- up
-    { 0,  1 },  -- down
-    { 1,  1 },  -- up-right
-    { 1, -1 }   -- down-right
+    { 1,  1 },  -- down-right
+    { 0,  1 },  -- down-left
+    { -1, 0 },  -- left
+    { 0, -1 },  -- up-left
 }
 
 local neighbors_offset_odd = {
-    { -1, 0 },  -- left
+    { 0, -1 },  -- up-right
     { 1,  0 },  -- right
-    { 0, -1 },  -- up
-    { 0,  1 },  -- down
-    { -1, 1 },  -- up-left
-    { -1, -1 }, -- down-left
+    { 0,  1 },  -- down-right
+    { -1, 1 },  -- down-left
+    { -1, 0 },  -- left
+    { -1, -1 }, -- up-left
 }
 
 -- PATHFINDER
@@ -33,15 +33,22 @@ function Pathfinder:init(map)
     self.map = map
 end
 
+function Pathfinder:get_neighbor_direction(i, is_odd)
+    return is_odd and neighbors_offset_odd[i] or neighbors_offset_even[i]
+end
+
 function Pathfinder:get_neighbors(node)
     local nodes = {}
     local x, y = node.tx, node.ty
     local neighbors_offset = even(y) and neighbors_offset_even or neighbors_offset_odd
     for i, offset in ipairs(neighbors_offset) do
         local tnode = self.map:get_node(x + offset[1], y + offset[2])
+        nodes[i] = false
         if tnode and tnode.cost ~= 0
         then
-            table.insert(nodes, tnode)
+            nodes[i] = tnode
+        else
+            nodes[i] = false
         end
     end
     return nodes
@@ -81,15 +88,18 @@ function Pathfinder:calculate(start, range, check_blocked, is_melee)
             end
 
             local neighbors = self:get_neighbors(current)
-            for _, neighbor in ipairs (neighbors) do
-                if not explored[neighbor] then
-                    local tentative = gscore[current] + neighbor.cost
+            for i = 1, 6, 1 do
+                local neighbor = neighbors[i]
+                if neighbor then
+                    if not explored[neighbor] then
+                        local tentative = gscore[current] + neighbor.cost
 
-                    if --[[ (check_blocked or not neighbor.is_blocked)
-                    and ]] (not reachable[neighbor] or tentative < gscore[neighbor]) then
-                        reachable[neighbor] = true
-                        gscore[neighbor] = tentative
-                        neighbor.parent = current
+                        if --[[ (check_blocked or not neighbor.is_blocked)
+                        and ]] (not reachable[neighbor] or tentative < gscore[neighbor]) then
+                            reachable[neighbor] = true
+                            gscore[neighbor] = tentative
+                            neighbor.parent = current
+                        end
                     end
                 end
             end
@@ -104,7 +114,7 @@ function Pathfinder:calculate(start, range, check_blocked, is_melee)
 end
 
 local abs = math.abs
-function Pathfinder:calculate_range(start, max_range)
+function Pathfinder:calculate_range(start, max_range, draw_borders)
     local actor = BattleState:current_actor()
     local state = BattleState.state
 
@@ -142,6 +152,50 @@ function Pathfinder:calculate_range(start, max_range)
                 node:change_color()
             end
         end
+    end
+end
+
+function Pathfinder:calculate_range2(start, max_range)
+    local reachable = { [start] = true }
+    local explored = {}
+
+    local current = next(reachable)
+    while current do
+        reachable[current] = nil
+        explored[current] = true
+
+        local dx = start.tx - current.tx
+        local dy = start.ty - current.ty
+
+        local p = ((odd(start.ty) and even(current.ty) and (start.tx < current.tx))
+            or (odd(current.ty) and even(start.ty) and (current.tx < start.tx))) and 1 or 0
+
+        local range = math.max(abs(dy), abs(dx) + math.floor(abs(dy) / 2) + p)
+        current.range = range
+        
+        local neighbors = self:get_neighbors(current)
+        for i = 1, 6, 1 do
+            local neighbor = neighbors[i]
+            if neighbor then
+                if not explored[neighbor] then
+                    reachable[neighbor] = true
+                else
+                    if range == max_range and range < neighbor.range and neighbor.range > max_range then
+                        current.borders[i > 3 and i-3 or i+3] = true
+                    end
+                    
+                    if neighbor.range == max_range and neighbor.range < range and range > max_range then
+                        neighbor.borders[i] = true
+                    end
+                end
+            else
+                if current.range <= max_range then
+                    current.borders[i > 3 and i-3 or i+3] = true
+                end
+            end
+        end
+
+        current = next(reachable)
     end
 end
 

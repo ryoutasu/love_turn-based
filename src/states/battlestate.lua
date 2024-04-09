@@ -25,7 +25,7 @@ function BattleState:init()
 
     self:add_unit(1, 1, 'Cat', true)
     self:add_unit(2, 2, 'Alice', true)
-    self:add_unit(3, 2, 'Bat', false)
+    self:add_unit(9, 3, 'Bat', false)
 
     self:start_turn()
 end
@@ -51,7 +51,8 @@ function BattleState:set_target_mode(current_spell)
     local actor = self:current_actor()
 
     self.map:reset_nodes()
-    self.pathfinder:calculate_range(actor.node, actor.attack_range)
+    -- self.pathfinder:calculate_range(actor.node, current_spell.range)
+    self.pathfinder:calculate_range2(actor.node, current_spell.range)
 
     for _, t in pairs(self.map.tiles._props) do
         t.can_be_selected = current_spell.filter(t) and t.range <= current_spell.range
