@@ -14,6 +14,10 @@ function Sprite:init(path)
     self.h = image:getHeight()
 end
 
+function Sprite:update(dt)
+    
+end
+
 function Sprite:draw(quad, x, y, r, sx, sy, ox, oy, ...)
     r,sx,sy,ox,oy = r or 0, sx or 1, sy or 1, ox or 0, oy or 0
     

@@ -32,7 +32,6 @@ function Slash:init(caster, target)
         x = x + 32
     end
     effect.frameTime = 0.025
-    effect.play = true
     self.timer = 0
     self.effect = effect
 end

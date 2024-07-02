@@ -1,5 +1,6 @@
 local unit = require 'src.objects.unit'
 local sprite = require 'src.sprite'
+local animation = require 'src.animation'
 
 local fireball = require 'src.spells.fireball'
 local healing = require 'src.spells.healing'
@@ -14,10 +15,25 @@ return {
             10,  -- damage
             1,   -- attack_range
             4,   -- move_range
-            6    -- initiative
+            5    -- initiative
         )
         u:add_spell(slash)
         u.name = 'Alice'
+        return u
+    end,
+    
+    ['Wizard'] = function (node, is_player, ...)
+        local u = unit(node, sprite('resources/wizard.png'), 32, 48, 96, 192, is_player)
+        u:set_statistics(
+            90, -- health
+            8,  -- damage
+            4,  -- attack_range
+            3,  -- move_range
+            3   -- initiative
+        )
+        u:add_spell(fireball)
+        u:add_spell(earthquake)
+        u.name = 'Wizard'
         return u
     end,
 
@@ -26,9 +42,9 @@ return {
         u:set_statistics(
             80, -- health
             5,  -- damage
-            3,   -- attack_range
-            2,   -- move_range
-            3    -- initiative
+            3,  -- attack_range
+            2,  -- move_range
+            2   -- initiative
         )
         u:add_spell(healing)
         u.name = 'Cat'
@@ -38,13 +54,20 @@ return {
     end,
 
     ['Witch'] = function (node, is_player, ...)
+        -- local sprite = animation('resources/Blue_witch/B_witch_idle.png', false, 0.5)
+        -- sprite:add_frame(0, 0, 32, 48)
+        -- sprite:add_frame(0, 48, 32, 48)
+        -- sprite:add_frame(0, 96, 32, 48)
+        -- sprite:add_frame(0, 96+48, 32, 48)
+        -- sprite.play = true
+
         local u = unit(node, sprite('resources/Blue_witch/B_witch_idle.png'), 32, 48, 32, 288, is_player)
         u:set_statistics(
             90, -- health
             8,  -- damage
-            4,   -- attack_range
-            3,   -- move_range
-            5    -- initiative
+            4,  -- attack_range
+            3,  -- move_range
+            3   -- initiative
         )
         u:add_spell(fireball)
         u:add_spell(earthquake)

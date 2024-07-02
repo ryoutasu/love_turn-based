@@ -8,8 +8,8 @@ function Animation:init(path, once, frameTime)
     self.frameTime = frameTime or 0.1
     self.time = 0
     self.currentFrame = 1
-    self.once = once
-    self.play = false
+    self.once = once or false
+    self.play = true
 end
 
 function Animation:add_frame(x, y, w, h)
@@ -23,6 +23,11 @@ end
 
 function Animation:update(dt)
     if self.play and #self.frames > 0 then
+        if #self.frames == 1 then
+            self.currentFrame = 1
+            return
+        end
+        
         self.time = self.time + dt
         if self.time >= self.frameTime then
             self.time = self.time - self.frameTime

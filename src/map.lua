@@ -303,7 +303,7 @@ function Map:start_drawing_path(tile)
     BattleState.state = 'drawing_path'
 
     local new_path = {}
-    if tile.is_open then
+    if tile.is_open or tile.can_be_selected then
         local path = tile:get_path()
         for _, t in ipairs(path) do
             table.insert(new_path, t)
@@ -311,10 +311,15 @@ function Map:start_drawing_path(tile)
     end
     self.drawing_path = new_path
     self.last_tile = tile
-    
+
     local movement_range = BattleState:current_actor().movement_range
     local max_range = movement_range - #self.drawing_path
     print('#self.drawing_path = ',#self.drawing_path)
+    
+    -- if tile.can_be_selected then
+    --     max_range = 0
+    -- end
+
     BattleState:recalculate_path(tile, max_range)
 end
 

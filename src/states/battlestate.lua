@@ -23,9 +23,9 @@ function BattleState:init()
     self.state = 'none'
     self.current_spell = nil
 
-    self:add_unit(1, 1, 'Witch', true)
+    self:add_unit(1, 1, 'Wizard', true)
     self:add_unit(2, 2, 'Alice', true)
-    self:add_unit(9, 3, 'Bat', false)
+    self:add_unit(4, 3, 'Bat', false)
 
     self:start_turn()
 end
@@ -218,31 +218,31 @@ end
 function BattleState:mousepressed(x, y, button)
     local actor = self:current_actor()
     if button == 1 then
+        local tile = self.map.highlighted
         if self.state == 'waiting' then
-            local tile = self.map.highlighted
             if tile and (tile.actor == actor or tile.is_open) then
                 self.map:start_drawing_path(tile)
             end
         end
 
         if self.state == 'spell' then
-            local t = self.map.highlighted
-            if t and t.can_be_selected then
+            if tile and tile.can_be_selected then
                 self.state = 'acting'
-                actor:set_current_action(spell, self.current_spell, t)
+                actor:set_current_action(spell, self.current_spell, tile)
                 self.panel:show_cancel_button(false)
             end
         end
     end
+
     if button == 2 then
         if --[[ actor.is_player and ]] self.state == 'waiting' then
             local tile = self.map.highlighted
             if tile then
 
-                if tile.is_open then
+                if --[[ tile.is_open then
                     self.state = 'acting'
                     actor:set_current_action(move, tile:get_path(), self.pathfinder)
-                elseif tile.can_be_selected then
+                elseif ]] tile.can_be_selected then
                     self.state = 'acting'
                     if actor.attack_range == 1 and tile.range > 1 then
                         actor:set_current_action(move, tile.parent:get_path(), self.pathfinder, tile.actor)
