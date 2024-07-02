@@ -23,7 +23,7 @@ function BattleState:init()
     self.state = 'none'
     self.current_spell = nil
 
-    self:add_unit(1, 1, 'Cat', true)
+    self:add_unit(1, 1, 'Witch', true)
     self:add_unit(2, 2, 'Alice', true)
     self:add_unit(9, 3, 'Bat', false)
 

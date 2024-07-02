@@ -136,11 +136,11 @@ function Unit:draw()
     local y = self.y
 
     if self.acting then
-        self.shader:draw(2, self.sprite.image, self.quad, x, y, 0, 1, 1, self.w*0.5, self.h*0.5)
+        self.shader:draw(2, self.sprite.image, self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
     end
 
     love.graphics.setColor(1, 1, 1, 1)
-    self.sprite:draw(self.quad, x, y, 0, 1, 1, self.w*0.5, self.h*0.5)
+    self.sprite:draw(self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
     
     -- if self.current_action then
     --     self.current_action:draw()
