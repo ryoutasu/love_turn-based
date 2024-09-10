@@ -314,7 +314,7 @@ function Map:start_drawing_path(tile)
 
     local movement_range = BattleState:current_actor().movement_range
     local max_range = movement_range - #self.drawing_path
-    print('#self.drawing_path = ',#self.drawing_path)
+    -- print('#self.drawing_path = ',#self.drawing_path)
     
     -- if tile.can_be_selected then
     --     max_range = 0

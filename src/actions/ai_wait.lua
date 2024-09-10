@@ -3,14 +3,17 @@ local move = require 'src.actions.move'
 
 local AI_Wait = Class{}
 AI_Wait:include(action)
+AI_Wait.name = 'AI Wait'
 
 local decide_time = 3
 local move_distance = 3
 function AI_Wait:init(actor)
     action.init(self, actor)
+end
 
+function AI_Wait:start()
+    self.actor.node:set_animation('border_fill', decide_time, { 1, 0, 0, 1 })
     self.time = 0
-    actor.node:set_animation('border_fill', decide_time, { 1, 0, 0, 1 })
 end
 
 function AI_Wait:update(dt)

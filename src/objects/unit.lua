@@ -38,6 +38,9 @@ function Unit:init(node, sprite, w, h, sw, sh, is_player)
     else
         self.shader:outline(1, 0, 0)
     end
+
+    self.died = false
+    self.is_dead = false
 end
 
 function Unit:set_statistics(...)
@@ -60,12 +63,12 @@ function Unit:set_node(node)
     node.actor = self
 end
 
-function Unit:set_current_action(action, ...)
-    -- if not self.current_action then
-        self.action_new = true
-        self.current_action = action(self, ...)
-    -- end
-end
+-- function Unit:set_current_action(action, ...)
+--     -- if not self.current_action then
+--         self.action_new = true
+--         self.current_action = action(self, ...)
+--     -- end
+-- end
 
 function Unit:add_spell(spell)
     self.spells[#self.spells+1] = spell
@@ -76,31 +79,44 @@ function Unit:get_spells()
 end
 
 function Unit:ally_to(unit)
+    if not unit then return nil end
     return self.is_player == unit.is_player
 end
 
 function Unit:enemy_to(unit)
+    if not unit then return nil end
     return not self.is_player == unit.is_player
 end
 
 function Unit:take_damage(source, damage, type)
+    if self.is_dead then return end
+
     Tagtext:add('-'..damage, self.x + 5, self.y - 40, 2, 30, { 1, 0, 0 })
     self.health = self.health - damage
-end
 
-function Unit:update(dt)
-    self.action_new = false
-    self.action_completed = false
-    if self.current_action then
-        local complete = self.current_action:update(dt)
-        if complete then
-            self.current_action = nil
-            self.action_completed = true
-        end
+    if self.health <= 0 then
+        self.health = 0
+        self.died = true
     end
 end
 
+function Unit:update(dt)
+    -- self.action_new = false
+    -- self.action_completed = false
+    -- if self.current_action then
+    --     local complete = self.current_action:update(dt)
+    --     if complete then
+    --         self.current_action = nil
+    --         self.action_completed = true
+    --     end
+    -- end
+end
+
 function Unit:draw_health(x, y)
+    if self.is_dead then
+        return
+    end
+
     local w = 45
     local h = 15
     local rx = x - w / 2

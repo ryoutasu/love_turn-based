@@ -26,7 +26,7 @@ function Earthquake:init(caster, target)
     for _, node in pairs(BattleState.map.tiles._props) do
         if node.aoe_target and node.actor then
             targets[#targets+1] = node
-            node.actor:take_damage(self.caster, 15)
+            node.actor:take_damage(self.caster, 100)
         end
     end
 end

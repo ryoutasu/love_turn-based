@@ -20,8 +20,10 @@ function BattleState:init()
     self.queue = queue(self.u, 230, love.graphics.getHeight() - 210)
 
     self.units = {}
+    self.actions = {}
     self.state = 'none'
     self.current_spell = nil
+    self.action_complete = false
 
     self:add_unit(1, 1, 'Wizard', true)
     self:add_unit(2, 2, 'Alice', true)
@@ -34,6 +36,10 @@ function BattleState:current_actor()
     return self.queue.current
 end
 
+function BattleState:current_action()
+    return self.actions[1]
+end
+
 function BattleState:add_unit(x, y, name, is_player)
     if not unit_def[name] then return false end
 
@@ -44,6 +50,11 @@ function BattleState:add_unit(x, y, name, is_player)
     table.insert(self.units, u)
     self.queue:add_actor(u)
     return true
+end
+
+function BattleState:add_action(action, pos)
+    pos = pos or #self.actions + 1
+    table.insert(self.actions, pos, action)
 end
 
 function BattleState:set_target_mode(current_spell)
@@ -112,7 +123,7 @@ function BattleState:start_turn()
         local target
         local cost = 1/0
         for _, u in ipairs(self.units) do
-            if u.is_player then
+            if u.is_player and not u.is_dead then
                 local p = u.node:get_path()
                 if cost > #p then
                     cost = #p
@@ -127,7 +138,8 @@ function BattleState:start_turn()
     
             if node.range <= actor.attack_range then
                 target:set_animation('select', nil , { 1, 0, 0, 1 })
-                actor:set_current_action(attack, target.actor)
+                -- actor:set_current_action(attack, target.actor)
+                self:add_action(attack(actor, target.actor))
             else
                 
                 local path_to_closest = path_to_target
@@ -159,36 +171,52 @@ function BattleState:start_turn()
                     else
                         closest_node:show_path()
                     end
-                    actor:set_current_action(move, closest_node:get_path(), self.pathfinder, do_attack and target.actor or false)
+                    -- actor:set_current_action(move, closest_node:get_path(), self.pathfinder, do_attack and target.actor or false)
+                    self:add_action(move(actor, closest_node:get_path(), self.pathfinder, do_attack and target.actor or false))
                 else
-                    actor:set_current_action(ai_wait)
+                    -- actor:set_current_action(ai_wait)
+                    self:add_action(ai_wait(actor))
                 end
             end
         else
-            actor:set_current_action(ai_wait)
+            -- actor:set_current_action(ai_wait)
+            self:add_action(ai_wait(actor))
         end
         self.map:reset_nodes()
     end
 end
 
-function BattleState:handle_action()
-    if self:current_actor().action_new then
-        self.map:reset_nodes()
-        self.panel:disable()
-    end
-    if not self:current_actor().action_completed then return end
+function BattleState:handle_action(dt)
+    local complete = false
+    local currentAction = self:current_action()
 
-    -- self.queue:end_turn()
-    
-    self:start_turn()
+    if currentAction then
+        if currentAction.is_new then
+            self.map:reset_nodes()
+            self.panel:disable()
+
+            currentAction:start()
+            currentAction.is_new = false
+        end
+
+        complete = currentAction:update(dt)
+    else
+        if self.action_complete then
+            self:start_turn()
+        end
+    end
+
+    if complete then
+        table.remove(self.actions, 1)
+    end
+    self.action_complete = complete
 end
 
 function BattleState:update(dt)
     self.queue:update(dt)
-    self:handle_action()
+    self:handle_action(dt)
 
     self.map:update(dt)
-    -- self:update_drawing_path()
     for i, unit in ipairs(self.units) do
         unit:update(dt)
     end
@@ -201,11 +229,10 @@ function BattleState:draw()
     for _, unit in ipairs(self.units) do
         unit:draw()
     end
-    
-    for _, unit in ipairs(self.units) do
-        if unit.current_action then
-            unit.current_action:draw()
-        end
+
+    local current_action = self:current_action()
+    if current_action then
+        current_action:draw()
     end
     
     for _, unit in ipairs(self.units) do
@@ -228,7 +255,7 @@ function BattleState:mousepressed(x, y, button)
         if self.state == 'spell' then
             if tile and tile.can_be_selected then
                 self.state = 'acting'
-                actor:set_current_action(spell, self.current_spell, tile)
+                self:add_action(spell(actor, self.current_spell, tile))
                 self.panel:show_cancel_button(false)
             end
         end
@@ -239,15 +266,15 @@ function BattleState:mousepressed(x, y, button)
             local tile = self.map.highlighted
             if tile then
 
-                if --[[ tile.is_open then
+                if tile.is_open then
                     self.state = 'acting'
-                    actor:set_current_action(move, tile:get_path(), self.pathfinder)
-                elseif ]] tile.can_be_selected then
+                    self:add_action(move(actor, tile:get_path(), self.pathfinder))
+                elseif tile.can_be_selected then
                     self.state = 'acting'
                     if actor.attack_range == 1 and tile.range > 1 then
-                        actor:set_current_action(move, tile.parent:get_path(), self.pathfinder, tile.actor)
+                        self:add_action(move(actor, tile.parent:get_path(), self.pathfinder, tile.actor))
                     else
-                        actor:set_current_action(attack, tile.actor)
+                        self:add_action(attack(actor, tile.actor))
                     end
                 end
             end
@@ -265,7 +292,7 @@ function BattleState:mousereleased(x, y, button)
         if next(path) then
             self.state = 'acting'
             local actor = self:current_actor()
-            actor:set_current_action(move, path, self.pathfinder, self.map.last_tile.actor)
+            self:add_action(move(actor, path, self.pathfinder, self.map.last_tile.actor))
         else
             self.map:stop_drawing_path()
         end

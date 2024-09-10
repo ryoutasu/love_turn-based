@@ -7,6 +7,7 @@ local move_time = 0.3
 
 local Move = Class{}
 Move:include(action)
+Move.name = 'Move'
 
 function Move:init(actor, path, pathfinder, attack_target)
     action.init(self, actor)
@@ -14,10 +15,12 @@ function Move:init(actor, path, pathfinder, attack_target)
     self.path = path
     self.pathfinder = pathfinder
     self.attack_target = attack_target
+end
 
+function Move:start()
     local node = table.remove(self.path, 1)
     if next(self.path) then
-        self.tween = tween.new(first_last_time, actor, { x = node.x, y = node.y }, 'inCubic')
+        self.tween = tween.new(first_last_time, self.actor, { x = node.x, y = node.y }, 'inCubic')
     else
         self.tween = tween.new(first_last_time, self.actor, { x = node.x, y = node.y }, 'inOutCubic')
     end
@@ -43,8 +46,9 @@ function Move:update(dt)
         
         if self.attack_target then
             -- self.actor:set_current_action(attack, self.attack_target)
-            self.actor.current_action = attack(self.actor, self.attack_target)
-            return false
+            -- self.actor.current_action = attack(self.actor, self.attack_target)
+            BattleState:add_action(attack(self.actor, self.attack_target))
+            -- return true
         end
 
         return true

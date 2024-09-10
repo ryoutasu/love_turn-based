@@ -111,11 +111,62 @@ function Queue:add_actor(actor)
     self:fill_next_panel()
 end
 
+function Queue:remove_actor(actor)
+    for i = #self.all_units, 1, -1 do
+        if self.all_units[i] == actor then
+            table.remove(self.all_units, i)
+            print('removed from all_units')
+        end
+    end
+
+    for i = #self.awaiting, 1, -1 do
+        if self.awaiting[i] == actor then
+            table.remove(self.awaiting, i)
+            print('removed from awaiting')
+        end
+    end
+
+    -- for i = #self.finished, 1, -1 do
+    --     if self.finished[i] == actor then
+    --         table.remove(self.finished, i)
+    --         print('removed from finished')
+    --     end
+    -- end
+
+    table.sort(self.all_units, function (a, b)
+        return a.initiative > b.initiative
+    end)
+
+    table.sort(self.awaiting, function (a, b)
+        return a.initiative > b.initiative
+    end)
+
+    self:redraw()
+    self.nextPanel.children = {}
+    self:fill_next_panel()
+end
+
+function Queue:redraw()
+    local currentPanel = self.currentPanel
+
+    local j = 1
+    for i = self.index + 1, currentPanel.rows do
+        local child = currentPanel:getChildren(i, 1)
+        local unit = self.awaiting[j]
+        if unit then
+            child.text = unit.name
+        else
+            currentPanel.children[i * currentPanel.cols + 1] = nil
+        end
+        j = j + 1
+    end
+end
+
 function Queue:new_round()
     self.round = self.round + 1
 
-    for i = 1, #self.finished, 1 do
-        local a = self.finished[i]
+    for i = 1, #self.all_units, 1 do
+        local a = self.all_units[i]
         table.insert(self.awaiting, a)
     end
 
@@ -123,7 +174,7 @@ function Queue:new_round()
         return a.initiative > b.initiative
     end)
 
-    self.mainPanel:getChildren(1, self.round).text = 'Rnd' .. self.round .. ':'
+    self.mainPanel:getChildren(1, self.round).text = 'Rnd ' .. self.round .. ':'
     self.currentPanel = self.nextPanel
     self.currentPanel:setStyle(styleAwaiting)
 

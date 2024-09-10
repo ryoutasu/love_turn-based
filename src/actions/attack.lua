@@ -3,13 +3,19 @@ local tween = require 'lib.tween'
 
 local Attack = Class{}
 Attack:include(action)
+Attack.name = 'Attack'
 
 local attack_time = 0.25
 local back_time = 0.4
 function Attack:init(actor, target)
     action.init(self, actor)
-
     self.target = target
+end
+
+function Attack:start()
+    local target = self.target
+    local actor = self.actor
+
     self.tween = tween.new(attack_time, actor, { x = target.x, y = target.y }, 'inBack')
     self.attacking = true
     target.node.can_be_attacked = false
