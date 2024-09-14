@@ -96,7 +96,17 @@ function Unit:take_damage(source, damage, type)
 
     if self.health <= 0 then
         self.health = 0
-        self.died = true
+        self.is_dead = true
+
+        -- play death animation
+        self.sprite_sx = 1.35
+        self.sprite_sy = 0.4
+
+        self.node.dead_unit = self
+        self.node.actor = nil
+        self.node.is_blocked = false
+
+        BattleState:remove_unit(self)
     end
 end
 
@@ -148,6 +158,8 @@ function Unit:draw_health(x, y)
 end
 
 function Unit:draw()
+    if self.is_dead and self.node.actor then return end
+
     local x = self.x
     local y = self.y
 
@@ -157,12 +169,6 @@ function Unit:draw()
 
     love.graphics.setColor(1, 1, 1, 1)
     self.sprite:draw(self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
-    
-    -- if self.current_action then
-    --     self.current_action:draw()
-    -- end
-
-    -- self:draw_health(x, y)
 end
 
 return Unit

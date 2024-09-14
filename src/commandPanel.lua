@@ -20,7 +20,8 @@ function CommandPanel:init(urutora, x, y)
         text = 'Skip'
     })
     :action(function(e)
-        BattleState:current_actor():set_current_action(skip)
+        -- BattleState:current_actor():set_current_action(skip)
+        BattleState:add_action(skip(BattleState:current_actor()))
     end)
     local cancelButton = Urutora.button({
         x = x, y = y,

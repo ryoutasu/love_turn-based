@@ -118,16 +118,16 @@ function Map:check_highlight_tile(x, y)
             self.highlighted:hide_path()
         end
 
-        self.highlighted:unhighlight()
+        -- self.highlighted:unhighlight()
         self.highlighted = nil
     end
 
-    for i, tile in pairs(self.tiles._props) do
+    for _, tile in pairs(self.tiles._props) do
         tile.cursor_inside = false
         tile.aoe_target = false
 
         is_inside = is_point_inside_hex(x, y, tile.x, tile.y)
-        
+
         if is_inside then
             self.highlighted = tile
             self.entering_tile = tile
@@ -191,9 +191,9 @@ function Map:cursor_enters_tile(tile)
         end
     end
     
-    if state == 'waiting' and tile.actor and tile.actor ~= actor then
-        self:show_actor_movement_range(tile)
-    end
+    -- if state == 'waiting' and tile.actor and tile.actor ~= actor then
+    --     self:show_actor_movement_range(tile)
+    -- end
 
     if state == 'drawing_path' then
         if tile ~= self.last_tile then

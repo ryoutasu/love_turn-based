@@ -15,6 +15,7 @@ function Tile:init(x, y, tx, ty, cost)
     self.is_open = false
 
     self.actor = nil
+    self.dead_unit = nil
     self.cursor_inside = false
     self.acting = false
     self.as_path = false

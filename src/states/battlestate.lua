@@ -24,10 +24,14 @@ function BattleState:init()
     self.state = 'none'
     self.current_spell = nil
     self.action_complete = false
+    -- self.queue:create_panels()
+end
 
+function BattleState:enter()
     self:add_unit(1, 1, 'Wizard', true)
-    self:add_unit(2, 2, 'Alice', true)
     self:add_unit(4, 3, 'Bat', false)
+    self:add_unit(2, 2, 'Alice', true)
+    -- self.queue:reorder()
 
     self:start_turn()
 end
@@ -55,6 +59,10 @@ end
 function BattleState:add_action(action, pos)
     pos = pos or #self.actions + 1
     table.insert(self.actions, pos, action)
+end
+
+function BattleState:remove_unit(unit)
+    self.queue:remove_actor(unit)
 end
 
 function BattleState:set_target_mode(current_spell)
@@ -227,7 +235,15 @@ function BattleState:draw()
     self.map:draw()
 
     for _, unit in ipairs(self.units) do
-        unit:draw()
+        if unit.is_dead then
+            unit:draw()
+        end
+    end
+
+    for _, unit in ipairs(self.units) do
+        if not unit.is_dead then
+            unit:draw()
+        end
     end
 
     local current_action = self:current_action()
@@ -240,6 +256,7 @@ function BattleState:draw()
     end
 
     self.u:draw()
+    self.queue:draw()
 end
 
 function BattleState:mousepressed(x, y, button)
@@ -257,6 +274,7 @@ function BattleState:mousepressed(x, y, button)
                 self.state = 'acting'
                 self:add_action(spell(actor, self.current_spell, tile))
                 self.panel:show_cancel_button(false)
+                self.current_spell = nil
             end
         end
     end

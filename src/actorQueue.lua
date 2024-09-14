@@ -1,31 +1,70 @@
 local tween = require 'lib.tween'
 
-local styleFinished = {
-    fgColor = { 0.5, 0.5, 0.5, 0.5 },
-    bgColor = { 0, 0, 0, 0 }
-}
-local styleCurrent = {
-    bgColor = { love.math.colorFromBytes(39, 170, 225) }
-}
-local styleAwaiting = {
-    bgColor = { 0, 0, 0, 0 }
-}
-local styleNext = {
-    fgColor = { love.math.colorFromBytes(0, 0, 0, 0) },
-    bgColor = { 0, 0, 0, 0 }
-}
-local styleText = {
-    -- outline = 'line'
-    bgColor = { love.math.colorFromBytes(231, 74, 153, 125) }
-}
+local playerPanelColor = { love.math.colorFromBytes(39, 170, 225) }
+local enemyPanelColor = { love.math.colorFromBytes(225, 58, 39) }
 
-local rows = 7
-local cellHeight = nil
+local rows = 10
 
-local function addText(parent, row, col)
-    parent:addAt(row, col, Urutora.label({
-        text = 'Next:'
-    }):setStyle(styleText))
+local panelWidth = 100
+local panelHeight = 30
+local panelOffset = 10
+
+local panelX = 1150
+local panelY = 100
+local panelAddX = panelX + 100
+
+local currentSize = 1.2
+local currentY = panelY - 50
+local currentX = panelX - (panelWidth * currentSize - panelWidth)
+
+local defualtFont = love.graphics.newFont(11)
+local currentFont = love.graphics.newFont(14)
+
+local tween_time = 0.5
+local easing = 'outCirc'
+
+local Panel = Class{}
+
+function Panel:init(x, y, actor)
+    self.x = x
+    self.y = y
+    self.actor = actor
+
+    self.a = 0
+    self.color = actor.is_player and playerPanelColor or enemyPanelColor
+    self.size = 1
+
+    self.isCurrent = false
+    self.toDelete = false
+end
+
+function Panel:update(dt)
+    if self.tween then
+        local complete = self.tween:update(dt)
+
+        if complete then
+            self.tween = nil
+
+            if self.toDelete then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+function Panel:draw()
+    love.graphics.setColor(self.color[1], self.color[2], self.color[3], self.a)
+    love.graphics.rectangle('fill', self.x, self.y, panelWidth * self.size, panelHeight * self.size)
+
+    love.graphics.setColor(.3, .3, .3, self.a)
+    love.graphics.rectangle('line', self.x, self.y, panelWidth * self.size, panelHeight * self.size)
+
+    love.graphics.setFont(self.isCurrent and currentFont or defualtFont)
+    love.graphics.setColor(1, 1, 1, self.a)
+    local offset = math.floor(8 * self.size)
+    love.graphics.print(self.actor.name, self.x + offset, self.y + offset)
 end
 
 local Queue = Class{}
@@ -44,71 +83,50 @@ function Queue:init(urutora, x, y)
     self.text = {}
     self.round = 0
 
-    local w = (love.graphics.getWidth() - x) - 10
-    local h = (love.graphics.getHeight() - y) - 10
-    local mainPanel = Urutora.panel({
-        x = x, y = y,
-        w = w, h = h,
-        cols = 10, rows = rows,
-        csx = 60
-    })
-
-    urutora:add(mainPanel)
-
-    -- self.tweens = {}
+    self.tweens = {}
     self.panels = {}
-    self.mainPanel = mainPanel
-    self.currentPanel = nil
-    self.nextPanel = nil
-    self.opacityTween = nil
-    
-    self:create_next_panel()
 end
 
-function Queue:create_next_panel()
-    local col = #self.panels + 1
-    local panel = Urutora.panel({
-        cols = 1, rows = rows-1,
-        cellHeight = cellHeight
-    })
-    addText(self.mainPanel, 1, col)
-    self.mainPanel:rowspanAt(2, col, rows-1):addAt(2, col, panel)
-
-    table.insert(self.panels, panel)
-    self.nextPanel = panel
-
-    styleNext.fgColor[4] = 0
-    self.opacityTween = tween.new(1, styleNext.fgColor, { [4] = 1 })
-
-    return panel
+local function getRowY(row)
+    return (panelHeight * (row - 1)) + (panelOffset * (row - 1))
 end
 
-function Queue:fill_next_panel()
-    local nextPanel = self.nextPanel
+function Queue:create_panel(actor, row)
+    local x, y = panelAddX, panelY + getRowY(row)
 
-    for i, unit in ipairs(self.all_units) do
-        local t = nextPanel:getChildren(i, 1)
-        if t then
-            t.text = unit.name
-        else
-            local text = Urutora.label({
-                text = unit.name,
-                align = 'left',
-            }):setStyle(styleNext)
-            self.nextPanel:addAt(i, 1, text)
-        end
-    end
+    local panel = Panel(x, y, actor)
+    self.panels[actor] = panel
+
+    panel.tween = tween.new(tween_time, panel, { x = panelX, y = y, a = 1, size = 1 }, easing)
 end
 
 function Queue:add_actor(actor)
     table.insert(self.all_units, actor)
-    table.insert(self.finished, actor)
 
-    table.sort(self.all_units, function (a, b)
-        return a.initiative > b.initiative
-    end)
+    local row = 0
+    for index, finishedActor in ipairs(self.finished) do
+        if finishedActor.initiative < actor.initiative then
+            table.insert(self.finished, index, actor)
+            row = index
+            break
+        end
+    end
 
-    self:fill_next_panel()
+    if row == 0 then
+        table.insert(self.finished, actor)
+        row = #self.finished
+    end
+
+    self:create_panel(actor, row)
+
+    if row < #self.finished then
+        for i = row + 1, #self.finished do
+            local actorToMove = self.finished[i]
+            local panel = self.panels[actorToMove]
+            
+            panel.tween = tween.new(tween_time, panel, { x = panelX, y = panelY + getRowY(i), a = 1, size = 1 }, easing)
+        end
+    end
 end
 
 function Queue:remove_actor(actor)
@@ -126,12 +144,12 @@ function Queue:remove_actor(actor)
         end
     end
 
-    -- for i = #self.finished, 1, -1 do
-    --     if self.finished[i] == actor then
-    --         table.remove(self.finished, i)
-    --         print('removed from finished')
-    --     end
-    -- end
+    for i = #self.finished, 1, -1 do
+        if self.finished[i] == actor then
+            table.remove(self.finished, i)
+            print('removed from finished')
+        end
+    end
 
     table.sort(self.all_units, function (a, b)
         return a.initiative > b.initiative
@@ -141,45 +159,25 @@ function Queue:remove_actor(actor)
         return a.initiative > b.initiative
     end)
 
-    self:redraw()
-    self.nextPanel.children = {}
-    self:fill_next_panel()
-end
+    table.sort(self.finished, function (a, b)
+        return a.initiative > b.initiative
+    end)
 
-function Queue:redraw()
-    local currentPanel = self.currentPanel
-
-    local j = 1
-    for i = self.index + 1, currentPanel.rows do
-        local child = currentPanel:getChildren(i, 1)
-        local unit = self.awaiting[j]
-        if unit then
-            child.text = unit.name
-        else
-            currentPanel.children[i * currentPanel.cols + 1] = nil
-        end
-        j = j + 1
-    end
+    local panel = self.panels[actor]
+    panel.tween = tween.new(tween_time, panel, { x = panelAddX, y = panelY, a = 0, size = 1 }, 'inCirc')
+    panel.toDelete = true
 end
 
 function Queue:new_round()
     self.round = self.round + 1
 
-    for i = 1, #self.all_units, 1 do
-        local a = self.all_units[i]
-        table.insert(self.awaiting, a)
-    end
-
-    table.sort(self.awaiting, function (a, b)
+    table.sort(self.all_units, function (a, b)
         return a.initiative > b.initiative
     end)
 
-    self.mainPanel:getChildren(1, self.round).text = 'Rnd ' .. self.round .. ':'
-    self.currentPanel = self.nextPanel
-    self.currentPanel:setStyle(styleAwaiting)
-
-    self:create_next_panel()
-    self:fill_next_panel()
+    for _, actor in ipairs(self.finished) do
+        table.insert(self.awaiting, actor)
+    end
 
     self.finished = {}
     self.index = 0
@@ -187,20 +185,44 @@ end
 
 function Queue:start_turn()
     if self.current then
-        self.currentPanel:getChildren(self.index, 1):setStyle(styleFinished)
         self.current.acting = false
         table.insert(self.finished, self.current)
+        self.panels[self.current].isCurrent = false
     end
 
     if not next(self.awaiting) then
         self:new_round()
     end
-    
+
     self.index = self.index + 1
     local unit = table.remove(self.awaiting, 1)
-    self.currentPanel:getChildren(self.index, 1):setStyle(styleCurrent)
     self.current = unit
     self.current:set_acting()
+
+    local panel = self.panels[self.current]
+    panel.tween = tween.new(tween_time, panel, { x = currentX, y = currentY, a = 1, size = 1.2 }, easing)
+    panel.isCurrent = true
+
+    local n = 1
+    for i = 1, #self.awaiting do
+        local actor = self.awaiting[i]
+        if actor then
+            local panel = self.panels[actor]
+            panel.tween = tween.new(tween_time, panel, { x = panelX, y = panelY + getRowY(n), a = 1, size = 1 }, easing)
+
+            n = n + 1
+        end
+    end
+
+    for i = 1, #self.finished do
+        local actor = self.finished[i]
+        if actor then
+            local panel = self.panels[actor]
+            panel.tween = tween.new(tween_time, panel, { x = panelX, y = panelY + getRowY(n), a = 1, size = 1 }, easing)
+
+            n = n + 1
+        end
+    end
 end
 
 function Queue:end_turn()
@@ -208,7 +230,24 @@ function Queue:end_turn()
 end
 
 function Queue:update(dt)
-    local complete = self.opacityTween:update(dt)
+    for actor, panel in pairs(self.panels) do
+        local delete = panel:update(dt)
+
+        if delete then
+            -- for i, panelToDelete in ipairs(self.panels) do
+            --     if panelToDelete == panel then
+            --         table.remove(self.panels, i)
+            --     end
+            -- end
+            self.panels[actor] = nil
+        end
+    end
+end
+
+function Queue:draw()
+    for _, panel in pairs(self.panels) do
+        panel:draw()
+    end
 end
 
 return Queue
