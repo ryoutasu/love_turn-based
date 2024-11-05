@@ -21,7 +21,7 @@ local defualtFont = love.graphics.newFont(11)
 local currentFont = love.graphics.newFont(14)
 
 local tween_time = 0.5
-local easing = 'outCirc'
+local easing = 'outCubic'
 
 local Panel = Class{}
 
@@ -36,9 +36,29 @@ function Panel:init(x, y, actor)
 
     self.isCurrent = false
     self.toDelete = false
+    self.order = 0
+    self.cursorInside = false
 end
 
 function Panel:update(dt)
+    local mx, my = love.mouse.getPosition()
+    local cursorInside = false
+
+    if mx >= self.x and mx <= self.x + panelWidth
+    and my >= self.y and my <= self.y + panelHeight then
+        cursorInside = true
+    end
+
+    if cursorInside and not self.cursorInside then
+        self.cursorInside = true
+        self.actor.show_name = true
+    end
+
+    if not cursorInside and self.cursorInside then
+        self.cursorInside = false
+        self.actor.show_name = false
+    end
+
     if self.tween then
         local complete = self.tween:update(dt)
 
@@ -58,7 +78,11 @@ function Panel:draw()
     love.graphics.setColor(self.color[1], self.color[2], self.color[3], self.a)
     love.graphics.rectangle('fill', self.x, self.y, panelWidth * self.size, panelHeight * self.size)
 
-    love.graphics.setColor(.3, .3, .3, self.a)
+    if self.cursorInside then
+        love.graphics.setColor(.0, .0, .0, self.a)
+    else
+        love.graphics.setColor(.3, .3, .3, self.a)
+    end
     love.graphics.rectangle('line', self.x, self.y, panelWidth * self.size, panelHeight * self.size)
 
     love.graphics.setFont(self.isCurrent and currentFont or defualtFont)
@@ -69,9 +93,7 @@ end
 
 local Queue = Class{}
 
-function Queue:init(urutora, x, y)
-    self.u = urutora
-
+function Queue:init(x, y)
     self.x = x
     self.y = y
 
@@ -85,6 +107,7 @@ function Queue:init(urutora, x, y)
 
     self.tweens = {}
     self.panels = {}
+    self.panelsOrdered = {}
 end
 
 local function getRowY(row)
@@ -96,6 +119,7 @@ function Queue:create_panel(actor, row)
 
     local panel = Panel(x, y, actor)
     self.panels[actor] = panel
+    table.insert(self.panelsOrdered, panel)
 
     panel.tween = tween.new(tween_time, panel, { x = panelX, y = y, a = 1, size = 1 }, easing)
 end
@@ -133,21 +157,18 @@ function Queue:remove_actor(actor)
     for i = #self.all_units, 1, -1 do
         if self.all_units[i] == actor then
             table.remove(self.all_units, i)
-            print('removed from all_units')
         end
     end
 
     for i = #self.awaiting, 1, -1 do
         if self.awaiting[i] == actor then
             table.remove(self.awaiting, i)
-            print('removed from awaiting')
         end
     end
 
     for i = #self.finished, 1, -1 do
         if self.finished[i] == actor then
             table.remove(self.finished, i)
-            print('removed from finished')
         end
     end
 
@@ -164,8 +185,9 @@ function Queue:remove_actor(actor)
     end)
 
     local panel = self.panels[actor]
-    panel.tween = tween.new(tween_time, panel, { x = panelAddX, y = panelY, a = 0, size = 1 }, 'inCirc')
+    panel.tween = tween.new(tween_time, panel, { x = panelAddX, a = 0, size = 1 }, 'inCirc')
     panel.toDelete = true
+    panel.order = 99
 end
 
 function Queue:new_round()
@@ -202,27 +224,28 @@ function Queue:start_turn()
     local panel = self.panels[self.current]
     panel.tween = tween.new(tween_time, panel, { x = currentX, y = currentY, a = 1, size = 1.2 }, easing)
     panel.isCurrent = true
+    panel.order = 0
 
     local n = 1
-    for i = 1, #self.awaiting do
-        local actor = self.awaiting[i]
-        if actor then
-            local panel = self.panels[actor]
-            panel.tween = tween.new(tween_time, panel, { x = panelX, y = panelY + getRowY(n), a = 1, size = 1 }, easing)
+    for i, actor in ipairs(self.awaiting) do
+        local panel = self.panels[actor]
+        panel.tween = tween.new(tween_time, panel, { x = panelX, y = panelY + getRowY(n), a = 1, size = 1 }, easing)
+        panel.order = n
 
-            n = n + 1
-        end
+        n = n + 1
+    end
+    
+    for i, actor in ipairs(self.finished) do
+        local panel = self.panels[actor]
+        panel.tween = tween.new(tween_time, panel, { x = panelX, y = panelY + getRowY(n), a = 1, size = 1 }, easing)
+        panel.order = n
+
+        n = n + 1
     end
 
-    for i = 1, #self.finished do
-        local actor = self.finished[i]
-        if actor then
-            local panel = self.panels[actor]
-            panel.tween = tween.new(tween_time, panel, { x = panelX, y = panelY + getRowY(n), a = 1, size = 1 }, easing)
-
-            n = n + 1
-        end
-    end
+    table.sort(self.panelsOrdered, function (a, b)
+        return a.order > b.order
+    end)
 end
 
 function Queue:end_turn()
@@ -230,22 +253,18 @@ function Queue:end_turn()
 end
 
 function Queue:update(dt)
-    for actor, panel in pairs(self.panels) do
+    for index, panel in pairs(self.panelsOrdered) do
         local delete = panel:update(dt)
 
         if delete then
-            -- for i, panelToDelete in ipairs(self.panels) do
-            --     if panelToDelete == panel then
-            --         table.remove(self.panels, i)
-            --     end
-            -- end
-            self.panels[actor] = nil
+            table.remove(self.panelsOrdered, index)
+            self.panels[panel.actor] = nil
         end
     end
 end
 
 function Queue:draw()
-    for _, panel in pairs(self.panels) do
+    for _, panel in pairs(self.panelsOrdered) do
         panel:draw()
     end
 end

@@ -1,12 +1,17 @@
+require 'utils'
+
 Class = require 'lib.class'
 Gamestate = require 'lib.gamestate'
 Vector = require 'lib.vector'
 Urutora = require 'lib.urutora'
 Tagtext = require 'src.tagtext'()
 Particles = require 'src.particles'()
-require 'colors'
 -- Input = require 'lib.input'
+require 'colors'
 
+MainMenuState = require 'src.states.mainMenu'
+CharacterSelect = require 'src.states.characterSelect'
+Levelmap = require 'src.states.levelmap2'
 BattleState = require 'src.states.battlestate'
 
 function love.load()
@@ -16,12 +21,10 @@ function love.load()
     love.window.setTitle('Love Turn-Based')
     math.randomseed(os.time())
 
-    -- love.graphics.setBackgroundColor(0.2, 0.35, 0.6, 1)
     love.graphics.setBackgroundColor(0.65, 0.65, 0.65, 1)
-    love.graphics.setColor(0, 0, 0, 1)
 
     Gamestate.registerEvents()
-    Gamestate.switch(BattleState)
+    Gamestate.switch(MainMenuState)
 end
 
 function love.update(dt)
@@ -30,11 +33,7 @@ function love.update(dt)
 end
 
 function love.draw()
-    BattleState:draw()
+    Gamestate.current():draw()
     Tagtext:draw()
     Particles:draw()
-end
-
-function love.mousepressed(...)
-    
 end

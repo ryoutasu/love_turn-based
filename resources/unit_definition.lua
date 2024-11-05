@@ -15,7 +15,7 @@ return {
             10,  -- damage
             1,   -- attack_range
             4,   -- move_range
-            5    -- initiative
+            10    -- initiative
         )
         u:add_spell(slash)
         u.name = 'Alice'
@@ -29,7 +29,7 @@ return {
             8,  -- damage
             4,  -- attack_range
             3,  -- move_range
-            3   -- initiative
+            6   -- initiative
         )
         u:add_spell(fireball)
         u:add_spell(earthquake)
@@ -37,17 +37,17 @@ return {
         return u
     end,
 
-    ['Cat'] = function (node, is_player, ...)
+    ['Gato'] = function (node, is_player, ...)
         local u = unit(node, sprite('resources/cat.png'), 64, 64, 64, 64, is_player)
         u:set_statistics(
             80, -- health
             5,  -- damage
             3,  -- attack_range
             2,  -- move_range
-            2   -- initiative
+            4   -- initiative
         )
         u:add_spell(healing)
-        u.name = 'Cat'
+        u.name = 'Gato'
         u.sprite_sx = 0.75
         u.sprite_sy = 0.75
         return u
@@ -67,7 +67,7 @@ return {
             8,  -- damage
             4,  -- attack_range
             3,  -- move_range
-            3   -- initiative
+            6   -- initiative
         )
         u:add_spell(fireball)
         u:add_spell(earthquake)
@@ -84,9 +84,35 @@ return {
             10,  -- damage
             1,   -- attack_range
             3,   -- move_range
-            4    -- initiative
+            8    -- initiative
         )
         u.name = 'Bat'
+        return u
+    end,
+
+    ['Bat2'] = function (node, is_player, ...)
+        local u = unit(node, sprite('resources/bat.png'), 81, 57, 81, 57, is_player)
+        u:set_statistics(
+            120, -- health
+            10,  -- damage
+            1,   -- attack_range
+            3,   -- move_range
+            7    -- initiative
+        )
+        u.name = 'Bat 2'
+        return u
+    end,
+
+    ['Bat3'] = function (node, is_player, ...)
+        local u = unit(node, sprite('resources/bat.png'), 81, 57, 81, 57, is_player)
+        u:set_statistics(
+            120, -- health
+            10,  -- damage
+            1,   -- attack_range
+            3,   -- move_range
+            4    -- initiative
+        )
+        u.name = 'Bat 3'
         return u
     end
 }

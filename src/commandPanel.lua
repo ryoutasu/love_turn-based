@@ -11,16 +11,12 @@ function CommandPanel:init(urutora, x, y)
     self.w = w
     self.h = h
 
-    self.queue_list_x = x + w + 15
-    self.queue_list_y = y
-
     local skipButton = Urutora.button({
         x = x, y = y,
         w = w, h = h,
         text = 'Skip'
     })
     :action(function(e)
-        -- BattleState:current_actor():set_current_action(skip)
         BattleState:add_action(skip(BattleState:current_actor()))
     end)
     local cancelButton = Urutora.button({

@@ -2,38 +2,95 @@ local map = require 'src.map'
 local pathfinder = require 'src.pathfinder'
 local queue = require 'src.actorQueue'
 local panel = require 'src.commandPanel'
+local unit = require 'src.objects.unit'
+local sprite = require 'src.sprite'
 
 local move = require 'src.actions.move'
 local attack = require 'src.actions.attack'
 local ai_wait = require 'src.actions.ai_wait'
 local spell = require 'src.actions.spell'
 
-local unit_def = require 'resources.unit_definition'
+local characterList = require 'src.characters'
+local spellList = require 'src.spells'
 
 local BattleState = {}
 
 function BattleState:init()
-    self.map = map(9, 5)
-    self.pathfinder = pathfinder(self.map)
     self.u = Urutora:new()
     self.panel = panel(self.u, 15, love.graphics.getHeight() - 210)
-    self.queue = queue(self.u, 230, love.graphics.getHeight() - 210)
+    self.result = nil
+    self.paused = false
+
+    local w, h = 200, 50
+    local x = love.graphics.getWidth()/2 - w/2
+    local y = love.graphics.getHeight()/2 - h/2
+    local resultLabel = Urutora.label({
+        x = x, y = y,
+        w = w, h = h,
+        text = '',
+        align = 'center'
+    }):deactivate()
+    
+    w, h = 100, 30
+    x = love.graphics.getWidth()/2 - w/2
+    y = love.graphics.getHeight()/2 - h/2 + resultLabel.h + 10
+    local resultButton = Urutora.button({
+        x = x, y = y,
+        w = w, h = h,
+        text = 'Continue',
+        align = 'center'
+    }):deactivate():action(function (e)
+        Gamestate.pop(self.result)
+    end)
+
+    self.u:add(resultLabel)
+    self.u:add(resultButton)
+
+    self.resultLabel = resultLabel
+    self.resultButton = resultButton
+end
+
+function BattleState:enter(from, args)
+    self.result = nil
+    self.paused = false
+
+    self.map = map(9, 5)
+    self.pathfinder = pathfinder(self.map)
+    self.queue = queue(230, love.graphics.getHeight() - 210)
 
     self.units = {}
     self.actions = {}
+
     self.state = 'none'
     self.current_spell = nil
     self.action_complete = false
-    -- self.queue:create_panels()
-end
 
-function BattleState:enter()
-    self:add_unit(1, 1, 'Wizard', true)
+    self.player = args.player
+
+    local i = 1
+    for name, character in pairs(self.player.party) do
+        self:add_unit(1, i, character, true, true)
+        i = i + 1
+    end
+
     self:add_unit(4, 3, 'Bat', false)
-    self:add_unit(2, 2, 'Alice', true)
-    -- self.queue:reorder()
 
     self:start_turn()
+end
+
+function BattleState:leave()
+    self.resultLabel:deactivate()
+    self.resultButton:deactivate()
+
+    self.map = nil
+    self.pathfinder = nil
+    self.queue = nil
+    
+    self.state = 'none'
+    self.current_spell = nil
+    self.action_complete = false
+    
+    self.result = nil
 end
 
 function BattleState:current_actor()
@@ -44,25 +101,106 @@ function BattleState:current_action()
     return self.actions[1]
 end
 
-function BattleState:add_unit(x, y, name, is_player)
-    if not unit_def[name] then return false end
+function BattleState:add_unit(x, y, table_or_name, is_player, change_character)
+    local character_table = table_or_name
+    if type(table_or_name) == "string" then
+        character_table = characterList[table_or_name]
+    end
 
     local node = self.map:get_node(x, y)
     if not node or node.is_blocked then return false end
+    
+    local rect = character_table.rect
+    local u = unit(node, sprite('resources/'.. character_table.sprite_path ..'.png'), rect[1], rect[2], rect[3], rect[4], is_player)
 
-    local u = unit_def[name](node, is_player)
+    u.name = character_table.name
+    
+    u.sprite_sx = character_table.sprite_sx or 1
+    u.sprite_sy = character_table.sprite_sy or 1
+    
+    u:set_statistics(
+        character_table.health,
+        character_table.damage,
+        character_table.attack_range,
+        character_table.move_range,
+        character_table.initiative
+    )
+
+    if character_table.current_health then
+        u.health = character_table.current_health
+    end
+
+    for _, spellname in ipairs(character_table.spells) do
+        u:add_spell(spellList[spellname])
+    end
+
+    if change_character then
+        u.character_reference = table_or_name
+    end
+
     table.insert(self.units, u)
     self.queue:add_actor(u)
-    return true
+
+    return u
 end
+
+-- function BattleState:add_unit(x, y, name, is_player)
+--     if not unit_def[name] then return false end
+
+--     local node = self.map:get_node(x, y)
+--     if not node or node.is_blocked then return false end
+
+--     local u = unit_def[name](node, is_player)
+--     table.insert(self.units, u)
+--     self.queue:add_actor(u)
+--     return true
+-- end
 
 function BattleState:add_action(action, pos)
     pos = pos or #self.actions + 1
     table.insert(self.actions, pos, action)
 end
 
-function BattleState:remove_unit(unit)
+-- function BattleState:remove_unit(unit)
+--     self.queue:remove_actor(unit)
+-- end
+
+function BattleState:unit_death(unit)
     self.queue:remove_actor(unit)
+
+    local is_win = true
+    local is_lose = true
+    for _, checking_unit in ipairs(self.units) do
+        if not checking_unit.is_dead then
+            if checking_unit.is_player then
+                is_lose = false
+            else
+                is_win = false
+            end
+        end
+    end
+
+    if is_win then
+        self.result = 'win'
+    end
+    if is_lose then
+        self.result = 'lose'
+    end
+end
+
+function BattleState:showResult()
+	assert(self.result ~= 'win' or self.result ~= 'lose', "Wrong result!")
+    self.paused = true
+
+    if self.result == 'win' then
+        self.resultLabel.text = 'You won!'
+    end
+    if self.result == 'lose' then
+        self.resultLabel.text = 'You lost...'
+    end
+
+    self.resultLabel:activate()
+    self.resultButton:activate()
 end
 
 function BattleState:set_target_mode(current_spell)
@@ -216,13 +354,20 @@ function BattleState:handle_action(dt)
 
     if complete then
         table.remove(self.actions, 1)
+        
+        if self.result then
+            self:showResult()
+        end
     end
     self.action_complete = complete
 end
 
 function BattleState:update(dt)
     self.queue:update(dt)
-    self:handle_action(dt)
+
+    if not self.paused then
+        self:handle_action(dt)
+    end
 
     self.map:update(dt)
     for i, unit in ipairs(self.units) do
@@ -253,6 +398,7 @@ function BattleState:draw()
     
     for _, unit in ipairs(self.units) do
         unit:draw_health(unit.x, unit.y)
+        unit:draw_name()
     end
 
     self.u:draw()
@@ -318,10 +464,6 @@ function BattleState:mousereleased(x, y, button)
     self.u:released(x, y)
 end
 
-function BattleState:mousemoved(x, y, dx, dy)
-    self.u:moved(x, y, dx, dy)
-end
-
 function BattleState:keypressed(key, scancode, isrepeat)
     self.u:keypressed(key, scancode, isrepeat)
     if key == 'escape' then
@@ -333,6 +475,8 @@ function BattleState:keypressed(key, scancode, isrepeat)
         end
     end
 end
+
+function BattleState:mousemoved(x, y, dx, dy) self.u:moved(x, y, dx, dy) end
 function BattleState:textinput(text) self.u:textinput(text) end
 function BattleState:wheelmoved(x, y) self.u:wheelmoved(x, y) end
 

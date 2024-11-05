@@ -4,6 +4,9 @@ local skip_turn = require 'src.actions.skip_turn'
 
 local statistics = require 'src.unit_statistics'
 
+local fontSize = 9
+local healthFont = love.graphics.newFont(fontSize)
+
 local Unit = Class{}
 Unit.include(statistics)
 
@@ -41,6 +44,7 @@ function Unit:init(node, sprite, w, h, sw, sh, is_player)
 
     self.died = false
     self.is_dead = false
+    self.show_name = false
 end
 
 function Unit:set_statistics(...)
@@ -94,6 +98,10 @@ function Unit:take_damage(source, damage, type)
     Tagtext:add('-'..damage, self.x + 5, self.y - 40, 2, 30, { 1, 0, 0 })
     self.health = self.health - damage
 
+    if self.character_reference then
+        self.character_reference.current_health =  self.health
+    end
+
     if self.health <= 0 then
         self.health = 0
         self.is_dead = true
@@ -105,8 +113,12 @@ function Unit:take_damage(source, damage, type)
         self.node.dead_unit = self
         self.node.actor = nil
         self.node.is_blocked = false
+        
+        if self.character_reference then
+            self.character_reference.is_dead = true
+        end
 
-        BattleState:remove_unit(self)
+        BattleState:unit_death(self)
     end
 end
 
@@ -122,6 +134,28 @@ function Unit:update(dt)
     -- end
 end
 
+function Unit:draw_name()
+    if not self.show_name then return end
+
+    local x, y = self.x, self.y
+
+    local w = 45
+    local h = 15
+    local rx = x - w / 2
+    local ry = y - 50
+    
+    local tx = rx + 3
+    local ty = ry + ((h - fontSize) / 2) - 1
+
+    love.graphics.setColor(0.75, 0.75, 0.75, 0.75)
+    love.graphics.rectangle('fill', rx, ry, w, h)
+    
+
+    love.graphics.setFont(healthFont)
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.print(self.name, tx, ty)
+end
+
 function Unit:draw_health(x, y)
     if self.is_dead then
         return
@@ -132,7 +166,6 @@ function Unit:draw_health(x, y)
     local rx = x - w / 2
     local ry = y - 34
     
-    local fontSize = 9
     local tx = rx + 3
     local ty = ry + ((h - fontSize) / 2) - 1
 
@@ -153,7 +186,7 @@ function Unit:draw_health(x, y)
     love.graphics.setColor(0.2, 0.2, 0.2, 1)
 
     local healthString = self.health .. '/' .. self.maxHealth
-    love.graphics.setNewFont(fontSize)
+    love.graphics.setFont(healthFont)
     love.graphics.print(healthString, tx, ty)
 end
 

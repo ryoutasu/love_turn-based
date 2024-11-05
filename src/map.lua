@@ -50,7 +50,6 @@ local function grid_to_world(x, y)
 end
 
 function Map:init(width, height)
-    print('map init')
     self.tiles = coord_mt()
 
     for j = 1, height do
@@ -137,16 +136,26 @@ function Map:check_highlight_tile(x, y)
     end
 
     if self.leaving_tile then
+        local leaving_tile = self.leaving_tile
         -- print('Leaving tile '..self.leaving_tile.tx..'/'..self.leaving_tile.ty)
         if self.showing_range then
             self.showing_range = false
             BattleState:cancel_target_mode()
         end
+
+        if leaving_tile.actor then
+            leaving_tile.actor.show_name = false
+        end
     end
     
     if self.entering_tile then
+        local entering_tile = self.entering_tile
         -- print('Entering tile '..self.entering_tile.tx..'/'..self.entering_tile.ty)
-        self:cursor_enters_tile(self.entering_tile)
+        self:cursor_enters_tile(entering_tile)
+        
+        if entering_tile.actor then
+            entering_tile.actor.show_name = true
+        end
     end
 end
 
