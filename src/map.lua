@@ -3,13 +3,13 @@ local coord_mt = require 'lib.coord_table'
 
 local Map = Class{}
 
-local startx = 64
-local starty = 64
+local map_offset_x = 0
+local map_offset_y = -20
 
 HEX_OFFSET_X = 4
 HEX_OFFSET_Y = 4
 
-HEX_RADIUS = 32
+HEX_RADIUS = 48
 
 local function is_point_inside_hex(x, y, cx, cy)
     local z = HEX_RADIUS + HEX_OFFSET_X;
@@ -37,14 +37,13 @@ local function is_point_inside_hex(x, y, cx, cy)
     return is_inside_1 or is_inside_2;
 end
 
+local hex_height = 2*HEX_RADIUS
+local hex_width = (math.sqrt(3)/2)*hex_height
 local function grid_to_world(x, y)
-    local height = 2*HEX_RADIUS
-    local width = (math.sqrt(3)/2)*height
+    local worldx = (hex_width * (x-1)) + (HEX_OFFSET_X * (x-1))
+    local worldy = (hex_height * 3/4 * (y-1)) + (HEX_OFFSET_Y * (y-1))
 
-    local worldx = (width * (x-1)) + (HEX_OFFSET_X * (x-1)) + startx
-    local worldy = (height * 3/4 * (y-1)) + (HEX_OFFSET_Y * (y-1)) + starty
-
-    if y % 2 == 0 then worldx = worldx + width/2 + HEX_OFFSET_X/2 end
+    if y % 2 == 0 then worldx = worldx + hex_width/2 + HEX_OFFSET_X/2 end
 
     return worldx, worldy
 end
@@ -52,9 +51,20 @@ end
 function Map:init(width, height)
     self.tiles = coord_mt()
 
+    local window_width = love.graphics.getWidth()
+    local window_height = love.graphics.getHeight()
+
+    local map_width = width * hex_width + (width-1) * HEX_OFFSET_X
+    local map_height = height * hex_height * 3/4 + (width-1) * HEX_OFFSET_Y
+
+    local startx = window_width / 2 - map_width / 2 + hex_width / 2 + map_offset_x
+    local starty = window_height / 2 - map_height / 2 + hex_height / 2 + map_offset_y
+
     for j = 1, height do
         for i = 1, width do
             local x, y = grid_to_world(i, j)
+            x = x + startx
+            y = y + starty
             self.tiles[{i, j}] = tile(x, y, i, j)
         end
     end
@@ -81,10 +91,10 @@ function Map:get_node(x, y)
     return t
 end
 
-function Map:get_height_px()
-    local r = HEX_RADIUS * 2 * 3/4
-    return starty + self.height * r + (self.height - 1) * HEX_OFFSET_Y
-end
+-- function Map:get_height_px()
+--     local r = HEX_RADIUS * 2 * 3/4
+--     return self.height * r + (self.height - 1) * HEX_OFFSET_Y
+-- end
 
 function Map:update(dt)
     self.entering_tile = nil
@@ -101,6 +111,13 @@ function Map:draw()
     for k, t in pairs(self.tiles._props) do
         t:draw()
     end
+
+    -- local window_width = love.graphics.getWidth()
+    -- local window_height = love.graphics.getHeight()
+
+    -- love.graphics.setColor(0, 0, 0, 1)
+    -- love.graphics.line(0, window_height/2, window_width, window_height/2)
+    -- love.graphics.line(window_width/2, 0, window_width/2, window_height)
 end
 
 function Map:check_highlight_tile(x, y)
@@ -145,6 +162,7 @@ function Map:check_highlight_tile(x, y)
 
         if leaving_tile.actor then
             leaving_tile.actor.show_name = false
+            leaving_tile.actor.panel.highlighted = false
         end
     end
     
@@ -155,6 +173,7 @@ function Map:check_highlight_tile(x, y)
         
         if entering_tile.actor then
             entering_tile.actor.show_name = true
+            entering_tile.actor.panel.highlighted = true
         end
     end
 end

@@ -6,7 +6,7 @@ function CommandPanel:init(urutora, x, y)
     self.y = y
     self.u = urutora
 
-    local w = 200
+    local w = 160
     local h = (love.graphics.getHeight() - y) / 2 - 10
     self.w = w
     self.h = h

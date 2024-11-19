@@ -29,6 +29,7 @@ function Panel:init(x, y, actor)
     self.x = x
     self.y = y
     self.actor = actor
+    actor.panel = self
 
     self.a = 0
     self.color = actor.is_player and playerPanelColor or enemyPanelColor
@@ -38,14 +39,15 @@ function Panel:init(x, y, actor)
     self.toDelete = false
     self.order = 0
     self.cursorInside = false
+    self.highlighted = false
 end
 
 function Panel:update(dt)
     local mx, my = love.mouse.getPosition()
     local cursorInside = false
 
-    if mx >= self.x and mx <= self.x + panelWidth
-    and my >= self.y and my <= self.y + panelHeight then
+    if mx >= self.x and mx <= self.x + panelWidth * self.size
+    and my >= self.y and my <= self.y + panelHeight * self.size then
         cursorInside = true
     end
 
@@ -78,9 +80,11 @@ function Panel:draw()
     love.graphics.setColor(self.color[1], self.color[2], self.color[3], self.a)
     love.graphics.rectangle('fill', self.x, self.y, panelWidth * self.size, panelHeight * self.size)
 
-    if self.cursorInside then
+    if self.cursorInside or self.highlighted then
+        love.graphics.setLineWidth(2)
         love.graphics.setColor(.0, .0, .0, self.a)
     else
+        love.graphics.setLineWidth(1)
         love.graphics.setColor(.3, .3, .3, self.a)
     end
     love.graphics.rectangle('line', self.x, self.y, panelWidth * self.size, panelHeight * self.size)

@@ -55,15 +55,21 @@ function Generator:generate(radius, width, height)
     end
 
     local endPoint, endIndex
+    local maxDistance = 0
     for i, point in ipairs(points) do
-        local neighborsCount = #point.neighbors
+        -- local neighborsCount = #point.neighbors
+        local distance = startPoint:dist2(point)
+        point.distance = distance
 
-        if (not endPoint or neighborsCount < #endPoint.neighbors)
-        and point ~= startPoint
+        if point ~= startPoint
         and not self:isNeighbors(point, startPoint) then
-            endPoint = point
-            endIndex = i
+            if (distance > maxDistance) then
+                endPoint = point
+                endIndex = i
+                maxDistance = distance
+            end
         end
+
     end
 
     self.startPoint = startPoint

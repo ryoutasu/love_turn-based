@@ -50,9 +50,13 @@ end
 
 function text:textInput(text, scancode)
   if scancode == 'backspace' then
-    local byteoffset = utf8.offset(self.text, -1)
-    if byteoffset then
-      self.text = string.sub(self.text, 1, byteoffset - 1)
+    if love.keyboard.isDown('lctrl') or love.keyboard.isDown('rctrl') then
+      self.text = ''
+    else
+      local byteoffset = utf8.offset(self.text, -1)
+      if byteoffset then
+        self.text = string.sub(self.text, 1, byteoffset - 1)
+      end
     end
   else
     if utils.textWidth(self) <= self.npw then

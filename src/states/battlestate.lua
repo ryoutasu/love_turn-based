@@ -40,7 +40,7 @@ function BattleState:init()
         text = 'Continue',
         align = 'center'
     }):deactivate():action(function (e)
-        Gamestate.pop(self.result)
+        Gamestate.pop({ result = self.result })
     end)
 
     self.u:add(resultLabel)
@@ -54,7 +54,7 @@ function BattleState:enter(from, args)
     self.result = nil
     self.paused = false
 
-    self.map = map(9, 5)
+    self.map = map(10, 8)
     self.pathfinder = pathfinder(self.map)
     self.queue = queue(230, love.graphics.getHeight() - 210)
 
@@ -67,38 +67,25 @@ function BattleState:enter(from, args)
 
     self.player = args.player
 
-    local i = 1
-    for name, character in pairs(self.player.party) do
-        self:add_unit(1, i, character, true, true)
-        i = i + 1
+    local ranged_i = 1
+    local melee_i = 1
+    for _, character in ipairs(self.player.party) do
+        local isMelee = character.attack_range == 1
+        if isMelee then
+            self:add_unit(2, melee_i, character, true, true)
+            melee_i = melee_i + 1
+        else
+            self:add_unit(1, ranged_i, character, true, true)
+            ranged_i = ranged_i + 1
+        end
     end
 
-    self:add_unit(4, 3, 'Bat', false)
+    -- self:add_unit(4, 3, 'Bat', false)
+    local x = math.random(self.map.width - 2, self.map.width)
+    local y = math.random(1, self.map.height)
+    self:add_unit(x, y, 'Bat', false)
 
     self:start_turn()
-end
-
-function BattleState:leave()
-    self.resultLabel:deactivate()
-    self.resultButton:deactivate()
-
-    self.map = nil
-    self.pathfinder = nil
-    self.queue = nil
-    
-    self.state = 'none'
-    self.current_spell = nil
-    self.action_complete = false
-    
-    self.result = nil
-end
-
-function BattleState:current_actor()
-    return self.queue.current
-end
-
-function BattleState:current_action()
-    return self.actions[1]
 end
 
 function BattleState:add_unit(x, y, table_or_name, is_player, change_character)
@@ -144,26 +131,33 @@ function BattleState:add_unit(x, y, table_or_name, is_player, change_character)
     return u
 end
 
--- function BattleState:add_unit(x, y, name, is_player)
---     if not unit_def[name] then return false end
+function BattleState:leave()
+    self.resultLabel:deactivate()
+    self.resultButton:deactivate()
 
---     local node = self.map:get_node(x, y)
---     if not node or node.is_blocked then return false end
+    self.map = nil
+    self.pathfinder = nil
+    self.queue = nil
+    
+    self.state = 'none'
+    self.current_spell = nil
+    self.action_complete = false
+    
+    self.result = nil
+end
 
---     local u = unit_def[name](node, is_player)
---     table.insert(self.units, u)
---     self.queue:add_actor(u)
---     return true
--- end
+function BattleState:current_actor()
+    return self.queue.current
+end
+
+function BattleState:current_action()
+    return self.actions[1]
+end
 
 function BattleState:add_action(action, pos)
     pos = pos or #self.actions + 1
     table.insert(self.actions, pos, action)
 end
-
--- function BattleState:remove_unit(unit)
---     self.queue:remove_actor(unit)
--- end
 
 function BattleState:unit_death(unit)
     self.queue:remove_actor(unit)

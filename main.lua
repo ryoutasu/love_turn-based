@@ -1,3 +1,5 @@
+DEBUG = false
+
 require 'utils'
 
 Class = require 'lib.class'
@@ -11,15 +13,17 @@ require 'colors'
 
 MainMenuState = require 'src.states.mainMenu'
 CharacterSelect = require 'src.states.characterSelect'
-Levelmap = require 'src.states.levelmap2'
+-- Level states (BattleState, EventState, etc.) before Levelmap state !!!
 BattleState = require 'src.states.battlestate'
+RestState = require 'src.states.reststate'
+EventState = require 'src.states.eventstate'
+Levelmap = require 'src.states.levelmap2'
 
 function love.load()
     love.window.setMode(1280, 720)
     -- Input.bind_callbacks()
-    love.graphics.setDefaultFilter( 'nearest', 'nearest' )
+    -- love.graphics.setDefaultFilter( 'nearest', 'nearest' )
     love.window.setTitle('Love Turn-Based')
-    math.randomseed(os.time())
 
     love.graphics.setBackgroundColor(0.65, 0.65, 0.65, 1)
 
@@ -36,4 +40,10 @@ function love.draw()
     Gamestate.current():draw()
     Tagtext:draw()
     Particles:draw()
+end
+
+function love.keypressed(key)
+    if key == 'f1' then
+        DEBUG = not DEBUG
+    end
 end

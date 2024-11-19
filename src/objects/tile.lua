@@ -204,14 +204,15 @@ function Tile:draw()
     local x, y = self.x, self.y
     local points = get_hex_points(x, y)
     -- local color = TILE_COLOR[self.color_id]
+    love.graphics.setLineWidth(1.5)
 
     local color = self.color
     love.graphics.setColor(color)
     love.graphics.polygon('fill', points)
     -- color = OUTLINE_COLOR[self.color_id]
 
-    color = Urutora.utils.darker(color, 1)
-    love.graphics.setColor(color)
+    -- color = Urutora.utils.darker(color, 1)
+    love.graphics.setColor(0.25, 0.25, 0.25, 1)
     love.graphics.polygon('line', points)
 
     for i, value in ipairs(self.borders) do
@@ -222,6 +223,8 @@ function Tile:draw()
             love.graphics.line(points)
         end
     end
+    
+    love.graphics.setLineWidth(1)
 
     if self.animation then
         self.animation:draw()

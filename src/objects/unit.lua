@@ -153,7 +153,7 @@ function Unit:draw_name()
 
     love.graphics.setFont(healthFont)
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.print(self.name, tx, ty)
+    PrintText(self.name, tx, ty)
 end
 
 function Unit:draw_health(x, y)
@@ -187,7 +187,7 @@ function Unit:draw_health(x, y)
 
     local healthString = self.health .. '/' .. self.maxHealth
     love.graphics.setFont(healthFont)
-    love.graphics.print(healthString, tx, ty)
+    PrintText(healthString, tx, ty)
 end
 
 function Unit:draw()
@@ -196,9 +196,9 @@ function Unit:draw()
     local x = self.x
     local y = self.y
 
-    if self.acting then
-        self.shader:draw(2, self.sprite.image, self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
-    end
+    -- if self.acting then
+    --     self.shader:draw(2, self.sprite.image, self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
+    -- end
 
     love.graphics.setColor(1, 1, 1, 1)
     self.sprite:draw(self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)

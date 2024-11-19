@@ -1,7 +1,7 @@
 return {
     name = 'Gato',
     sprite_path = 'cat',
-    rect = { 64, 64, 64, 64 },
+    rect = { 48, 48, 48, 48 },
 
     health = 80,
     damage = 5,
@@ -11,6 +11,6 @@ return {
     spells = {
         'healing',
     },
-    sprite_sx = 0.75,
-    sprite_sy = 0.75,
+    -- sprite_sx = 0.75,
+    -- sprite_sy = 0.75,
 }

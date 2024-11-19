@@ -7,7 +7,7 @@ local image = love.graphics.newImage(imageData)
 local Fireball = Class{
     name = 'Fireball',
     type = 'unit',
-    range = 8,
+    range = 20,
     filter = function(target)
         if target.actor and not target.actor.is_player then
             return true

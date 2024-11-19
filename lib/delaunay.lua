@@ -344,7 +344,7 @@ local Delaunay = {
   Point            = Point,
   Edge             = Edge,
   Triangle         = Triangle,
-	convexMultiplier = 0.5,
+	convexMultiplier = 0.8,
   _VERSION = "0.1"
 }
 
@@ -390,16 +390,14 @@ function Delaunay.triangulate(vertices)
   local p1 = Point(midx - 2 * deltaMax, midy - deltaMax)
   local p2 = Point(midx, midy + 2 * deltaMax)
   local p3 = Point(midx + 2 * deltaMax, midy - deltaMax)
+
   p1.id, p2.id, p3.id = nvertices + 1, nvertices + 2, nvertices + 3
   vertices[p1.id] = p1
   vertices[p2.id] = p2
   vertices[p3.id] = p3
 
   local triangles = {}
-  triangles[#triangles + 1] = Triangle(vertices[nvertices + 1],
-                                       vertices[nvertices + 2],
-                                       vertices[nvertices + 3]
-                              )
+  triangles[#triangles + 1] = Triangle(p1, p2, p3)
 
   for i = 1, nvertices do
   

@@ -1,16 +1,11 @@
-local characterList = require 'src.characters'
+local Characters = require 'src.characters'
 
 local gen = require 'src.levelgenerator'
 
 local offset = 75
 
-local nodeRadius = 35
-local nodeLineColor = { love.math.colorFromBytes(20, 140, 200) }
-local nodeFillColor = { love.math.colorFromBytes(39, 170, 225) }
-local nodeClosedFillColor = { love.math.colorFromBytes(128, 128, 128) }
-local nodeCompletedFillColor = { love.math.colorFromBytes(10, 128, 20) }
-local nodeEndFillColor = { love.math.colorFromBytes(128, 16, 16) }
-local nodeSelectLineColor = { love.math.colorFromBytes(10, 70, 100) }
+local Node = require 'src.levelmap.node'
+local CharacterList = require 'src.characterList'
 
 local function setupCharacter(character_table)
     local result = {}
@@ -35,65 +30,14 @@ end
 
 function Path:draw()
     if self.isOpen then
+        love.graphics.setLineWidth(3)
         love.graphics.setColor(1, 1, 1, 1)
     else
+        love.graphics.setLineWidth(1)
         love.graphics.setColor(0, 0, 0, 1)
     end
     local edge = self.edge
     love.graphics.line(edge.p1.x + offset, edge.p1.y + offset, edge.p2.x + offset, edge.p2.y + offset)
-end
-
-local Node = Class{}
-
-function Node:init(x, y, isOpen)
-    self.x = x
-    self.y = y
-    self.radius = nodeRadius
-
-    self.isOpen = isOpen or false
-    self.isCompleted = false
-    self.isFinish = false
-    self.cursorInside = false
-
-    -- self.next = {}
-    -- self.previous = {}
-
-    -- self.pathes = {}
-end
-
-function Node:update(dt)
-    local mx, my = love.mouse.getPosition()
-    local cursorInside = false
-
-    local dx, dy = self.x - mx, self.y - my
-    if dx * dx + dy * dy <= self.radius * self.radius then
-        cursorInside = true
-    end
-
-    if cursorInside and not self.cursorInside then
-        self.radius = nodeRadius * 1.2
-        self.cursorInside = true
-    end
-
-    if not cursorInside and self.cursorInside then
-        self.radius = nodeRadius
-        self.cursorInside = false
-    end
-end
-
-function Node:draw()
-    if self.isEnd then
-        love.graphics.setColor(nodeEndFillColor)
-    elseif self.isCompleted then
-        love.graphics.setColor(nodeCompletedFillColor)
-    elseif self.isOpen then
-        love.graphics.setColor(nodeFillColor)
-    else
-        love.graphics.setColor(nodeClosedFillColor)
-    end
-    love.graphics.circle('fill', self.x, self.y, self.radius)
-    love.graphics.setColor(nodeLineColor)
-    love.graphics.circle('line', self.x, self.y, self.radius)
 end
 
 local Levelmap = Class{}
@@ -102,18 +46,32 @@ function Levelmap:init()
     self.nodes = {}
     self.pathes = {}
     self.currentNode = nil
+    self.characterList = CharacterList(10, 10)
 end
 
 function Levelmap:enter(from, args)
+    local seed = args.seed or os.time()
+    math.randomseed(seed)
+
     local characterName = args.character
-    local character = setupCharacter(characterList[characterName])
+    -- local character = setupCharacter(characters[characterName])
     
     self.nodes = {}
     self.pathes = {}
     self.currentNode = nil
 
-    self.player = {}
-    self.player.party = { [characterName] = character }
+    self.player = {
+        -- party = {},
+        party = {},
+        addCharacter = function (player, characterName)
+            local character = setupCharacter(Characters[characterName])
+            -- player.party[characterName] = character
+            table.insert(player.party, character)
+        end
+    }
+    -- self.player.party = { [characterName] = character }
+    self.player:addCharacter(characterName)
+    self.characterList:setup(self.player.party)
 
     self.generator = gen()
     self.generator:generate(150, love.graphics.getWidth() - offset*2, love.graphics.getHeight() - offset*2)
@@ -124,35 +82,72 @@ function Levelmap:enter(from, args)
         edge.path = path
     end
 
-    for _, point in ipairs(self.generator.points) do
-        local isStartingPoint = point == self.generator.startPoint
-        local isEndingPoint = point == self.generator.endPoint
-        local node = Node(point.x + offset, point.y + offset, isStartingPoint)
+    local restNodes = 0
+    local startPoint = self.generator.startPoint
+    local endPoint = self.generator.endPoint
+    for i, point in ipairs(self.generator.points) do
+        local isStartingPoint = point == startPoint
+        local isEndingPoint = point == endPoint
+
+        local type = 'fight'
+        if isStartingPoint then
+            type = 'start'
+        elseif isEndingPoint then
+            type = 'end'
+        else
+            -- decide node type:
+            -- if a point not next to the start nor the end, it can be rest or event
+            -- can be only 1 rest point per level
+            -- other than start, end and rest nodes:
+            -- 35% fight
+            -- 35% event
+            -- 30% elites
+            local startNeighbor = self.generator:isNeighbors(point, startPoint)
+            local endNeighbor = self.generator:isNeighbors(point, endPoint)
+            local rand = math.random() * 100
+            if not startNeighbor and not endNeighbor and restNodes < 1 then
+                type = 'rest'
+                restNodes = restNodes + 1
+            elseif rand <= 35 then
+                type = 'event'
+            end
+        end
+        
+        local node = Node(point.x + offset, point.y + offset, isStartingPoint, type)
         node.point = point
 
         if isStartingPoint then
             self.currentNode = node
-        end
-        
-        if isEndingPoint then
-            node.isEnd = true
         end
 
         table.insert(self.nodes, node)
     end
 end
 
-function Levelmap:resume(from, result)
-    if result == 'lose' then
-        Gamestate.pop()
-    else
-        self.currentNode.isOpen = false
+function Levelmap:resume(from, args)
+    self:openNeighborNodes(self.currentNode)
+    
+    if from == BattleState then
+        if args.result == 'lose' then
+            Gamestate.pop()
+        else
+            self.currentNode.isCompleted = true
+        end
+    elseif from == RestState then
+        if args.complete then
+            self.currentNode.isCompleted = true
+        else
+            self.currentNode.isOpen = true
+        end
+    elseif from == EventState then
         self.currentNode.isCompleted = true
-
-        self:openNeighborNodes(self.currentNode)
-        
-        self.currentNode = nil
+    else
+        self.currentNode.isCompleted = true
     end
+
+    self.currentNode = nil
+    
+    self.characterList:setup(self.player.party)
 end
 
 function Levelmap:openNeighborNodes(node)
@@ -167,6 +162,7 @@ function Levelmap:openNeighborNodes(node)
         local isNeighbors, edge = self.generator:isNeighbors(currentPoint, point)
         if isNeighbors then
             other.isOpen = true
+            other.isDiscovered = true
             edge.path.isOpen = true
         else
             other.isOpen = false
@@ -187,6 +183,8 @@ function Levelmap:draw()
     for _, node in ipairs(self.nodes) do
         node:draw()
     end
+
+    self.characterList:draw()
 end
 
 function Levelmap:mousepressed(x, y, button)
@@ -197,7 +195,7 @@ function Levelmap:mousepressed(x, y, button)
             if node.isCompleted then
                 self:openNeighborNodes(node)
             else
-                Gamestate.push(BattleState, { player = self.player })
+                Gamestate.push(node:getGamestate(), { player = self.player })
             end
         end
     end
