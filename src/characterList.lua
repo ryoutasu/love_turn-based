@@ -18,7 +18,7 @@ function CharacterList:setup(characters)
     -- local x, y = self.x, self.y
     -- local oy = 0
     for _, character in ipairs(characters) do
-        local sprite = Sprite('resources/'.. character.sprite_path ..'.png')
+        local sprite = Sprite(character.sprite_path)
         local rect = character.rect
         local quad = love.graphics.newQuad(0, 0, rect[1], rect[2], rect[3], rect[4])
         -- local x, y = self.x - rect[1]/2 + 32, self.y - rect[2]/2 + 32 + oy
@@ -26,13 +26,6 @@ function CharacterList:setup(characters)
 
         -- oy = oy + 64 + 16 + 8
     end
-end
-
-function CharacterList:add(character)
-    local sprite = Sprite('resources/'.. character.sprite_path ..'.png')
-    local rect = character.rect
-    local quad = love.graphics.newQuad(0, 0, rect[1], rect[2], rect[3], rect[4])
-    table.insert(self.list, { sprite = sprite, quad = quad, character = character })
 end
 
 function CharacterList:draw()

@@ -20,13 +20,17 @@ local completeRingRadius = nodeRadius * 0.6
 
 local path = 'resources/'
 local fightPath = 'fight.png'
+local wildPath = 'wild_icon_indexed.png'
+local trainerPath = 'trainer_icon_indexed_clean.png'
 local eventPath = 'event.png'
 local restPath = 'rest.png'
 local bossPath = 'boss.png'
 
 local sprites = {
-    ['start'] = sprite(path .. fightPath),
-    ['fight'] = sprite(path .. fightPath),
+    ['start'] = sprite(path .. trainerPath),
+    -- ['fight'] = sprite(path .. fightPath),
+    ['wild'] = sprite(path .. wildPath),
+    ['trainer'] = sprite(path .. trainerPath),
     ['event'] = sprite(path .. eventPath),
     ['rest'] = sprite(path .. restPath),
     ['end'] = sprite(path .. bossPath)
@@ -35,8 +39,10 @@ local sprites = {
 local fontSize = 14
 local labelFont = love.graphics.newFont(fontSize)
 local labels = {
-    ['start'] = 'Fight',
-    ['fight'] = 'Fight',
+    ['start'] = 'Start',
+    -- ['fight'] = 'Fight',
+    ['wild'] = 'Bushes',
+    ['trainer'] = 'Trainer',
     ['event'] = 'Random event',
     ['rest'] = 'Rest',
     ['end'] = 'Boss fight'
@@ -44,7 +50,9 @@ local labels = {
 
 local typeGamestates = {
     ['start'] = BattleState,
-    ['fight'] = BattleState,
+    -- ['fight'] = BattleState,
+    ['wild'] = BattleState,
+    ['trainer'] = BattleState,
     ['event'] = EventState,
     ['rest'] = RestState,
     ['end'] = BattleState
@@ -52,12 +60,12 @@ local typeGamestates = {
 
 -- node types:
 -- start - fight
--- fight
+-- fight - wild pokemon or trainer
 -- event
 -- rest
 -- end - boss battle
 
-local defualtType = 'fight'
+local defualtType = 'wild'
 
 local Node = Class{}
 

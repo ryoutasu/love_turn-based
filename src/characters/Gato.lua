@@ -1,6 +1,6 @@
 return {
     name = 'Gato',
-    sprite_path = 'cat',
+    sprite_path = 'resources/cat.png',
     rect = { 48, 48, 48, 48 },
 
     health = 80,

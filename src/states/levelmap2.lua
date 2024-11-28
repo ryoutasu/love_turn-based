@@ -1,25 +1,12 @@
-local Characters = require 'src.characters'
+-- local Characters = require 'src.characters'
 
 local gen = require 'src.levelgenerator'
 
 local offset = 75
 
+local Player = require 'src.player'
 local Node = require 'src.levelmap.node'
 local CharacterList = require 'src.characterList'
-
-local function setupCharacter(character_table)
-    local result = {}
-
-    for key, value in pairs(character_table) do
-        result[key] = value
-    end
-
-    if result.health then
-        result.current_health = result.health
-    end
-
-    return result
-end
 
 local Path = Class{}
 
@@ -54,23 +41,15 @@ function Levelmap:enter(from, args)
     math.randomseed(seed)
 
     local characterName = args.character
-    -- local character = setupCharacter(characters[characterName])
     
     self.nodes = {}
     self.pathes = {}
     self.currentNode = nil
 
-    self.player = {
-        -- party = {},
-        party = {},
-        addCharacter = function (player, characterName)
-            local character = setupCharacter(Characters[characterName])
-            -- player.party[characterName] = character
-            table.insert(player.party, character)
-        end
-    }
-    -- self.player.party = { [characterName] = character }
+    self.player = Player()
     self.player:addCharacter(characterName)
+    self.player:addItem('catcher', 2)
+    self.player:addItem('healPotion', 2)
     self.characterList:setup(self.player.party)
 
     self.generator = gen()
@@ -89,7 +68,7 @@ function Levelmap:enter(from, args)
         local isStartingPoint = point == startPoint
         local isEndingPoint = point == endPoint
 
-        local type = 'fight'
+        local type = 'wild'
         if isStartingPoint then
             type = 'start'
         elseif isEndingPoint then
@@ -99,7 +78,9 @@ function Levelmap:enter(from, args)
             -- if a point not next to the start nor the end, it can be rest or event
             -- can be only 1 rest point per level
             -- other than start, end and rest nodes:
-            -- 35% fight
+            -- 35% fight:
+            -- 20% wild
+            -- 15% trainer
             -- 35% event
             -- 30% elites
             local startNeighbor = self.generator:isNeighbors(point, startPoint)
@@ -110,6 +91,8 @@ function Levelmap:enter(from, args)
                 restNodes = restNodes + 1
             elseif rand <= 35 then
                 type = 'event'
+            elseif rand > 35 and rand <= 50 then
+                type = 'trainer'
             end
         end
         
@@ -195,7 +178,7 @@ function Levelmap:mousepressed(x, y, button)
             if node.isCompleted then
                 self:openNeighborNodes(node)
             else
-                Gamestate.push(node:getGamestate(), { player = self.player })
+                Gamestate.push(node:getGamestate(), { player = self.player, type = node.type })
             end
         end
     end

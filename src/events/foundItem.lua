@@ -1,27 +1,30 @@
-local characters = require 'src.characters'
+local Items = require 'src.items'
 
 return function (player)
-    local character = 'Terrow'
-
+    local itemName = 'healPotion'
+    local item = Items[itemName]
+    local quantity = math.random(1, 2)
+    
     return {
         [1] = {
-            text = character .. ' wishes to join your party. Will you accept him?',
+            text = 'You found ' .. quantity .. ' of ' .. item.name .. '. Will you take it?',
             buttons = {
                 { text = 'Yes', action = function ()
-                    player:addCharacter(character)
+                    -- player:addCharacter(character)
+                    player:addItem(itemName, quantity)
                     return 2
                 end },
                 { text = 'No', action = function () return 3 end }
             }
         },
         [2] = {
-            text = 'You accepting ' .. character .. ' into your party!',
+            text = 'You take ' .. quantity .. ' of ' .. item.name .. '.',
             buttons = {
                 { text = 'Exit', action = function () return 0 end }
             }
         },
         [3] = {
-            text = 'You refuse to accept ' .. character .. ' to your party.',
+            text = 'You leave without taking items.',
             buttons = {
                 { text = 'Exit', action = function () return 0 end }
             }

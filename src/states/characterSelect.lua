@@ -31,7 +31,7 @@ function Frame:init(cx, cy, name)
     self.selected = false
 
     local character = Characters[name]
-    local sprite = Sprite('resources/'.. character.sprite_path ..'.png')
+    local sprite = Sprite(character.sprite_path)
     local rect = character.rect
     local quad = love.graphics.newQuad(0, 0, rect[1], rect[2], rect[3], rect[4])
 
@@ -134,7 +134,7 @@ function CharacterSelect:enter()
 
     local frame_1 = Frame(320, frameY, 'Leafen')
     local frame_2 = Frame(640, frameY, 'Emberpuff')
-    local frame_3 = Frame(960, frameY, 'Dewscale')
+    local frame_3 = Frame(960, frameY, 'Terrow')
 
     table.insert(self.frames, frame_1)
     table.insert(self.frames, frame_2)

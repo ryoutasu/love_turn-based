@@ -1,6 +1,6 @@
 return {
     name = 'Bat',
-    sprite_path = 'bat',
+    sprite_path = 'resources/bat.png',
     rect = { 81, 57, 81, 57 },
 
     health = 120,

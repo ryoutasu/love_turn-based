@@ -1,8 +1,8 @@
 local scale = 0.6
 
 return {
-    name = 'Dewscale',
-    sprite_path = 'resources/Characters/Dewscale/Dewscale_Low_indexed.png',
+    name = 'Terrow',
+    sprite_path = 'resources/Characters/Terrow/Terrow_Low_indexed.png',
     rect = { 128 * scale, 128 * scale, 128 * scale, 128 * scale },
     scale = scale,
 

@@ -4,12 +4,12 @@ local coord_mt = require 'lib.coord_table'
 local Map = Class{}
 
 local map_offset_x = 0
-local map_offset_y = -20
+local map_offset_y = 20
 
 HEX_OFFSET_X = 4
 HEX_OFFSET_Y = 4
 
-HEX_RADIUS = 48
+HEX_RADIUS = 44
 
 local function is_point_inside_hex(x, y, cx, cy)
     local z = HEX_RADIUS + HEX_OFFSET_X;

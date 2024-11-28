@@ -1,6 +1,6 @@
 return {
     name = 'Wizard',
-    sprite_path = 'wizard',
+    sprite_path = 'resources/wizard.png',
     rect = { 32, 48, 96, 192 },
 
     health = 90,

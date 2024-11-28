@@ -2,16 +2,20 @@ local map = require 'src.map'
 local pathfinder = require 'src.pathfinder'
 local queue = require 'src.actorQueue'
 local panel = require 'src.commandPanel'
-local unit = require 'src.objects.unit'
+local Unit = require 'src.objects.unit'
 local sprite = require 'src.sprite'
+local inventory = require 'src.inventory'
 
 local move = require 'src.actions.move'
 local attack = require 'src.actions.attack'
 local ai_wait = require 'src.actions.ai_wait'
 local spell = require 'src.actions.spell'
+local item = require 'src.actions.item'
+local Actions = require 'src.actions'
 
 local characterList = require 'src.characters'
 local spellList = require 'src.spells'
+local itemList = require 'src.items'
 
 local BattleState = {}
 
@@ -66,6 +70,7 @@ function BattleState:enter(from, args)
     self.action_complete = false
 
     self.player = args.player
+    self.inventory = inventory(50, 30, self.player.inventory, args.type)
 
     local ranged_i = 1
     local melee_i = 1
@@ -88,7 +93,7 @@ function BattleState:enter(from, args)
     self:start_turn()
 end
 
-function BattleState:add_unit(x, y, table_or_name, is_player, change_character)
+function BattleState:add_unit(x, y, table_or_name, is_player, do_change_character)
     local character_table = table_or_name
     if type(table_or_name) == "string" then
         character_table = characterList[table_or_name]
@@ -98,7 +103,7 @@ function BattleState:add_unit(x, y, table_or_name, is_player, change_character)
     if not node or node.is_blocked then return false end
     
     local rect = character_table.rect
-    local u = unit(node, sprite('resources/'.. character_table.sprite_path ..'.png'), rect[1], rect[2], rect[3], rect[4], is_player)
+    local u = Unit(node, sprite(character_table.sprite_path), rect[1], rect[2], rect[3], rect[4], is_player)
 
     u.name = character_table.name
     
@@ -119,9 +124,10 @@ function BattleState:add_unit(x, y, table_or_name, is_player, change_character)
 
     for _, spellname in ipairs(character_table.spells) do
         u:add_spell(spellList[spellname])
+        -- u:add_spell(spellname)
     end
 
-    if change_character then
+    if do_change_character then
         u.character_reference = table_or_name
     end
 
@@ -129,6 +135,19 @@ function BattleState:add_unit(x, y, table_or_name, is_player, change_character)
     self.queue:add_actor(u)
 
     return u
+end
+
+function BattleState:remove_unit(unit)
+    for index, other in ipairs(self.units) do
+        if other == unit then
+            table.remove(self.units, index)
+        end
+    end
+
+    self.queue:remove_actor(unit)
+    unit:remove()
+    
+    self:check_result()
 end
 
 function BattleState:leave()
@@ -141,6 +160,7 @@ function BattleState:leave()
     
     self.state = 'none'
     self.current_spell = nil
+    self.action_type = nil
     self.action_complete = false
     
     self.result = nil
@@ -162,6 +182,10 @@ end
 function BattleState:unit_death(unit)
     self.queue:remove_actor(unit)
 
+    self:check_result()
+end
+
+function BattleState:check_result()
     local is_win = true
     local is_lose = true
     for _, checking_unit in ipairs(self.units) do
@@ -197,8 +221,9 @@ function BattleState:showResult()
     self.resultButton:activate()
 end
 
-function BattleState:set_target_mode(current_spell)
+function BattleState:set_target_mode(current_spell, actionType)
     self.current_spell = current_spell
+    self.action_type = actionType or 'spell'
     local actor = self:current_actor()
 
     self.map:reset_nodes()
@@ -210,7 +235,7 @@ function BattleState:set_target_mode(current_spell)
         t:change_color()
     end
 
-    self.state = 'spell'
+    self.state = 'target'
     self.panel:show_cancel_button(true)
 end
 
@@ -255,6 +280,7 @@ function BattleState:start_turn()
     if actor.is_player == true then
         BattleState:open_attack_move(actor, node)
         self.panel:start_turn(actor)
+        self.inventory:enable()
     else
         self.state = 'ai'
         self.pathfinder:calculate(node, nil, true)
@@ -334,6 +360,7 @@ function BattleState:handle_action(dt)
         if currentAction.is_new then
             self.map:reset_nodes()
             self.panel:disable()
+            self.inventory:disable()
 
             currentAction:start()
             currentAction.is_new = false
@@ -368,6 +395,7 @@ function BattleState:update(dt)
         unit:update(dt)
     end
     self.u:update(dt)
+    self.inventory:update(dt)
 end
 
 function BattleState:draw()
@@ -395,8 +423,14 @@ function BattleState:draw()
         unit:draw_name()
     end
 
+    -- local x, y = 10, 10
+    -- for pos, item in pairs(self.player.inventory) do
+        
+    -- end
+
     self.u:draw()
     self.queue:draw()
+    self.inventory:draw()
 end
 
 function BattleState:mousepressed(x, y, button)
@@ -409,14 +443,24 @@ function BattleState:mousepressed(x, y, button)
             end
         end
 
-        if self.state == 'spell' then
+        if self.state == 'target' then
             if tile and tile.can_be_selected then
                 self.state = 'acting'
-                self:add_action(spell(actor, self.current_spell, tile))
+                local action = Actions[self.action_type]
+                local a = self.action_type == 'item' and self.player or actor
+                self:add_action(action(a, self.current_spell, tile))
                 self.panel:show_cancel_button(false)
                 self.current_spell = nil
             end
         end
+        -- if self.state == 'item' then
+        --     if tile and tile.can_be_selected then
+        --         self.state = 'acting'
+        --         self:add_action(item(self.player, self.current_spell, tile))
+        --         self.panel:show_cancel_button(false)
+        --         self.current_spell = nil
+        --     end
+        -- end
     end
 
     if button == 2 then
@@ -441,6 +485,7 @@ function BattleState:mousepressed(x, y, button)
             self.map:stop_drawing_path()
         end
     end
+    self.inventory:mousepressed(x, y)
     self.u:pressed(x, y, button)
 end
 
@@ -461,7 +506,7 @@ end
 function BattleState:keypressed(key, scancode, isrepeat)
     self.u:keypressed(key, scancode, isrepeat)
     if key == 'escape' then
-        if self.state == 'spell' then
+        if self.state == 'target' then
             self:cancel_target_mode()
         end
         if self.state == 'drawing_path' then

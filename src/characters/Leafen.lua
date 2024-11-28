@@ -2,8 +2,8 @@ local scale = 0.6
 
 return {
     name = 'Leafen',
-    sprite_path = 'Leafen_Low5',
-    rect = { 96 * scale, 128 * scale, 96 * scale, 128 * scale },
+    sprite_path = 'resources/Characters/Leafen/Leafen_Low_indexed.png',
+    rect = { 128 * scale, 128 * scale, 128 * scale, 128 * scale },
     scale = scale,
 
     health = 100,

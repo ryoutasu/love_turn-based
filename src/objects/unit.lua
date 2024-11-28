@@ -122,6 +122,23 @@ function Unit:take_damage(source, damage, type)
     end
 end
 
+function Unit:convertToParty()
+    return {
+        name = self.name,
+        sprite_path = self.sprite.path,
+        rect = { self.w, self.h, self.sw, self.sh },
+        -- scale = scale,
+    
+        health = self.maxHealth,
+        current_health = self.health,
+        damage = self.damage,
+        attack_range = self.attack_range,
+        move_range = self.move_range,
+        initiative = self.initative,
+        spells = self.spells,
+    }
+end
+
 function Unit:update(dt)
     -- self.action_new = false
     -- self.action_completed = false
@@ -202,6 +219,11 @@ function Unit:draw()
 
     love.graphics.setColor(1, 1, 1, 1)
     self.sprite:draw(self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
+end
+
+function Unit:remove()
+    self.node.actor = nil
+    self.node.is_blocked = false
 end
 
 return Unit

@@ -2,7 +2,7 @@ local scale = 0.6
 
 return {
     name = 'Emberpuff',
-    sprite_path = 'Emberpuff_Low_Mirrored',
+    sprite_path = 'resources/Characters/Emberpuff/Emberpuff_Low_indexed.png',
     rect = { 128 * scale, 128 * scale, 128 * scale, 128 * scale },
     scale = scale,
 
@@ -13,5 +13,6 @@ return {
     initiative = 10,
     spells = {
         'slash',
+        'fireball',
     },
 }

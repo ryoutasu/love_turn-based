@@ -9,6 +9,7 @@ function Sprite:init(path)
         images[path] = image
     end
     self.image = image
+    self.path = path
 
     self.w = image:getWidth()
     self.h = image:getHeight()

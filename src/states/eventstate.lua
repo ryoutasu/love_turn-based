@@ -31,9 +31,12 @@ function EventState:enter(from, args)
     self.type = args.type
     self.player = args.player
 
-    self.buttons = {}
+    -- for i, button in ipairs(self.buttons) do
+    --     self.u:remove(button)
+    -- end
+    -- self.buttons = {}
 
-    local steps = Events.joinEvent(args.player)
+    local steps = Events.foundItem(args.player)
     self.steps = steps
 
     self:setupStep(1)
