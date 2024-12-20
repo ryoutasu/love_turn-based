@@ -1,7 +1,9 @@
 local animation = require 'src.animation'
 
-local Slash = Class{
-    name = 'Slash',
+local multiplier = 2
+
+local Lash = Class{
+    name = 'Lash',
     type = 'unit',
     range = 1,
     filter = function(target)
@@ -10,9 +12,10 @@ local Slash = Class{
         end
         return false
     end,
+    element = 'nature'
 }
 
-function Slash:init(caster, target)
+function Lash:init(caster, target)
     target = target.actor
 
     self.caster = caster
@@ -31,12 +34,12 @@ function Slash:init(caster, target)
         effect:add_frame(x, y, 32, 48)
         x = x + 32
     end
-    effect.frameTime = 0.025
+    effect.frameTime = 0.065
     self.timer = 0
     self.effect = effect
 end
 
-function Slash:update(dt)
+function Lash:update(dt)
     self.effect:update(dt)
     local _, _, w, h = self.effect:get_frame():getViewport()
     self.ox = w / 2
@@ -45,14 +48,15 @@ function Slash:update(dt)
         return false
     end
 
-    self.target:take_damage(self.caster, 15)
+    local damage = self.caster.damage * multiplier
+    self.target:take_damage(self.caster, damage)
 
     return true
 end
 
-function Slash:draw()
-    love.graphics.setColor(1, 1, 1, 1)
+function Lash:draw()
+    love.graphics.setColor(0, 1, 0, 1)
     self.effect:draw(self.x, self.y, self.r, 1, 2, self.ox, self.oy)
 end
 
-return Slash
+return Lash

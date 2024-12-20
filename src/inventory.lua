@@ -1,26 +1,42 @@
 local itemList = require 'src.items'
 
-local fontSize = 12
-local quantityFont = love.graphics.newFont(fontSize)
+local fontSize = 14
+local font = love.graphics.newFont(fontSize)
+
+local itemFontSize = 12
+local itemFont = love.graphics.newFont(itemFontSize)
 
 local itemRadius = 20
-local offset = itemRadius * 0.6
+-- local offset = itemRadius * 0.6
+local offset = 5
+local textOffsetX = 5
+
+local buttonWidth = 140
+local buttonHeight = 24
+
+local itemWidth = 120
+local itemHeight = 20
 
 local Inventory = Class{}
 
-function Inventory:init(x, y, inventory, node_type)
+function Inventory:init(x, y, inventory)
     self.x = x
     self.y = y
+    self.w = buttonWidth
+    self.h = buttonHeight
     
     for pos, item in ipairs(inventory) do
-        item.isActive = true
-        if item.item.name == 'Catcher' and node_type ~= 'wild' then
+        if item.item.usableInFight then
+            item.isActive = true
+        else
             item.isActive = false
         end
     end
     self.items = inventory
 
     self.enabled = false
+    self.opened = false
+    self.cursorInside = false
 end
 
 function Inventory:enable()
@@ -32,82 +48,104 @@ function Inventory:disable()
 end
 
 function Inventory:update(dt)
+    self.cursorInside = false
     local mx, my = love.mouse.getPosition()
-    
-    local x, y = self.x, self.y
-    for pos, item in ipairs(self.items) do
-        love.graphics.setColor(item.item.color)
-        love.graphics.circle('fill', x, y, itemRadius)
+    if mx >= self.x and mx <= self.x + buttonWidth
+    and my >= self.y and my <= self.y + buttonHeight
+    then
+        self.cursorInside = true
+    end
 
-        local dx, dy = x - mx, y - my
-        if dx * dx + dy * dy <= itemRadius * itemRadius then
-            item.cursorInside = true
-        else
+    if self.opened then
+        local x = self.x
+        local y = self.y + buttonHeight + offset
+        for pos, item in ipairs(self.items) do
             item.cursorInside = false
-        end
+            if mx >= x and mx <= x + itemWidth
+            and my >= y and my <= y + itemHeight
+            then
+                item.cursorInside = true
+            end
 
-        x = x + itemRadius + itemRadius + offset
+            y = y + itemHeight + offset
+        end
     end
 end
 
 function Inventory:draw()
-    local x, y = self.x, self.y
     love.graphics.setLineWidth(1)
+    local color = self.opened and { 0.75, 0.75, 0.75 } or { 0.5, 0.5, 0.5 }
+    if self.cursorInside then color = Urutora.utils.brighter(color) end
+    love.graphics.setColor(color)
+    love.graphics.rectangle('fill', self.x, self.y, buttonWidth, buttonHeight)
+    love.graphics.setColor(0.0, 0.0, 0.0, 1)
+    love.graphics.rectangle('line', self.x, self.y, buttonWidth, buttonHeight)
+
+    local fontHeight = font:getHeight('Items')
+    local ty = self.y + buttonHeight/2 - fontHeight/2
     
-    for pos, item in ipairs(self.items) do
-        local radius = itemRadius
-        if item.cursorInside then radius = radius * 1.2 end
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setFont(font)
+    PrintText('Items', self.x + textOffsetX, ty)
 
-        if self.enabled and item.isActive then
-            love.graphics.setColor(item.item.color or {0.75, 0.75, 0.75, 1})
-        else
-            love.graphics.setColor(0.5, 0.5, 0.5, 1)
-        end
-        love.graphics.circle('fill', x, y, radius)
+    if self.opened then
+        love.graphics.setFont(itemFont)
+        local x = self.x
+        local y = self.y + buttonHeight + offset
+        for pos, item in ipairs(self.items) do
+            color = { 0.75, 0.75, 0.75 }
+            if item.cursorInside then color = Urutora.utils.brighter(color) end
+            if not self.enabled or not item.isActive then color = { 0.5, 0.5, 0.5 } end
+            love.graphics.setColor(color)
+            love.graphics.rectangle('fill', x, y, itemWidth, itemHeight)
+            love.graphics.setColor(0.0, 0.0, 0.0, 1)
+            love.graphics.rectangle('line', x, y, itemWidth, itemHeight)
 
-        if self.enabled and item.isActive then
-            love.graphics.setColor(0.5, 0.5, 0.5, 0.5)
-        else
-            love.graphics.setColor(0.25, 0.25, 0.25, 1)
-        end
-        love.graphics.circle('line', x, y, radius)
-
-        local w = quantityFont:getWidth(tostring(item.quantity))
-        local h = quantityFont:getHeight(tostring(item.quantity))
-
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.setFont(quantityFont)
-        PrintText(tostring(item.quantity), x - w/2, y - h/2)
-
-        if item.cursorInside then
-            local name = item.item.name
-            local description = item.item.description
-            local oy = 20
-            
-            local nameW = quantityFont:getWidth(name)
-            local nameH = quantityFont:getHeight(name)
-
-            local descW = quantityFont:getWidth(description)
-            local descH = quantityFont:getHeight(description)
-
-            local rectW = math.max(nameW, descW) + 4
-            local rectH = nameH + descH + 6
-            love.graphics.setColor(0.8, 0.8, 0.8, 1)
-            love.graphics.rectangle('fill', x, y + oy, rectW, rectH)
-            
-            love.graphics.setColor(0, 0, 0, 1)
-            love.graphics.rectangle('line', x, y + oy, rectW, rectH)
+            local text = item.item.name .. ', ' .. tostring(item.quantity)
+            fontHeight = itemFont:getHeight(text)
+            ty = y + itemHeight/2 - fontHeight/2
 
             love.graphics.setColor(0, 0, 0, 1)
-            PrintText(name, x + 2, y + oy + 2)
-            PrintText(description, x + 2, y + oy + nameH + 4)
+            PrintText(text, x + textOffsetX, ty)
+            
+            y = y + itemHeight + offset
         end
-
-        x = x + itemRadius + itemRadius + offset
+        
+        x = self.x
+        y = self.y + buttonHeight + offset
+        for pos, item in ipairs(self.items) do
+            if item.cursorInside then
+                local name = item.item.name
+                local description = item.item.description
+                
+                -- local nameW = font:getWidth(name)
+                -- local nameH = font:getHeight(name)
+    
+                local descW = itemFont:getWidth(description) + textOffsetX + textOffsetX
+                local descH = itemFont:getHeight(description) + 6
+    
+                -- local rectW = math.max(nameW, descW) + 4
+                -- local rectH = nameH + descH + 6
+                love.graphics.setColor(0.8, 0.8, 0.8, 1)
+                love.graphics.rectangle('fill', x + itemWidth + offset, y, descW, descH)
+                
+                love.graphics.setColor(0, 0, 0, 1)
+                love.graphics.rectangle('line', x + itemWidth + offset, y, descW, descH)
+                ty = y + itemHeight/2 - fontHeight/2
+    
+                love.graphics.setColor(0, 0, 0, 1)
+                -- PrintText(name, x + 2, y + oy + 2)
+                PrintText(description, x + itemWidth + offset + textOffsetX, ty)
+            end
+            y = y + itemHeight + offset
+        end
     end
 end
 
 function Inventory:mousepressed(x, y)
+    if self.cursorInside then
+        self.opened = not self.opened
+    end
     if not self.enabled then return end
 
     for pos, item in ipairs(self.items) do

@@ -25,6 +25,8 @@ function Move:start()
         self.tween = tween.new(first_last_time, self.actor, { x = node.x, y = node.y }, 'inOutCubic')
     end
     self.node = node
+
+    self.actor.is_moving = true
 end
 
 function Move:update(dt)
@@ -43,6 +45,7 @@ function Move:update(dt)
     else
         self.node:hide_path()
         self.actor:set_node(self.node)
+        self.actor.is_moving = false
         
         if self.attack_target then
             -- self.actor:set_current_action(attack, self.attack_target)

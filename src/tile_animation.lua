@@ -4,12 +4,12 @@ local select_anim_max_time = 1.5
 local fill_anim_max_time = 3
 
 local function get_select_points(x, y, t)
-    local size = HEX_RADIUS - 2
+    local size = HEX_RADIUS - 3
     local line_length = size / 3
     local offset = line_length * t/select_anim_max_time*3
 
     local px = x
-    local py = y - size
+    local py = y - size * HEX_HEIGHT
     local angle_deg = 30
     local angle_rad = math.pi / 180 * angle_deg
     local first_line_length = line_length * 2
@@ -39,7 +39,7 @@ local function get_select_points(x, y, t)
             end
 
             px = px + math.cos(angle_rad) * d
-            py = py + math.sin(angle_rad) * d
+            py = py + math.sin(angle_rad) * d * HEX_HEIGHT
 
             table.insert(points, px)
             table.insert(points, py)
@@ -49,7 +49,7 @@ local function get_select_points(x, y, t)
             d = line_length - offset
         end
         px = px + math.cos(angle_rad) * d
-        py = py + math.sin(angle_rad) * d
+        py = py + math.sin(angle_rad) * d * HEX_HEIGHT
 
         if offset < line_length then
             angle_deg = angle_deg + 60
@@ -84,7 +84,7 @@ local function get_border_fill_points(x, y, t)
         angle_rad = math.pi / 180 * angle_deg
         
         px = px + math.cos(angle_rad) * d
-        py = py + math.sin(angle_rad) * d
+        py = py + math.sin(angle_rad) * d * HEX_HEIGHT
         
         table.insert(points, px)
         table.insert(points, py)
@@ -100,9 +100,11 @@ end
 local animation = {
     ['select'] = {
         func = function (x, y, t)
+            love.graphics.setLineWidth(3)
             local lines = get_select_points(x, y, t)
             for i, p in ipairs(lines) do
                 love.graphics.line(p[1], p[2], p[3], p[4])
+
                 if p[3] ~= p[5] or p[4] ~= p[6] then
                     love.graphics.line(p[3], p[4], p[5], p[6])
                 end
@@ -113,6 +115,7 @@ local animation = {
     },
     ['border_fill'] = {
         func = function (x, y, t)
+            love.graphics.setLineWidth(2)
             local p = get_border_fill_points(x, y, t)
             if p then love.graphics.line(p) end
         end,
@@ -140,7 +143,6 @@ end
 function TileAnim:draw()
     local old_width = love.graphics.getLineWidth()
     love.graphics.setColor(self.color)
-    love.graphics.setLineWidth(3)
 
     self.func(self.x, self.y, self.timer)
 

@@ -4,12 +4,13 @@ local coord_mt = require 'lib.coord_table'
 local Map = Class{}
 
 local map_offset_x = 0
-local map_offset_y = 20
+local map_offset_y = 0
 
 HEX_OFFSET_X = 4
 HEX_OFFSET_Y = 4
 
-HEX_RADIUS = 44
+HEX_RADIUS = 60
+HEX_HEIGHT = 0.7
 
 local function is_point_inside_hex(x, y, cx, cy)
     local z = HEX_RADIUS + HEX_OFFSET_X;
@@ -19,9 +20,9 @@ local function is_point_inside_hex(x, y, cx, cy)
     local px0 = 0
     local py0 = 0
     local px1 = 0
-    local py1 = z
+    local py1 = z * HEX_HEIGHT
     local px2 = z * math.sqrt(3) / 2
-    local py2 = z / 2
+    local py2 = z / 2 * HEX_HEIGHT
     local px3 = z * math.sqrt(3) / 2
     local py3 = 0
 
@@ -41,7 +42,7 @@ local hex_height = 2*HEX_RADIUS
 local hex_width = (math.sqrt(3)/2)*hex_height
 local function grid_to_world(x, y)
     local worldx = (hex_width * (x-1)) + (HEX_OFFSET_X * (x-1))
-    local worldy = (hex_height * 3/4 * (y-1)) + (HEX_OFFSET_Y * (y-1))
+    local worldy = (hex_height * 3/4 * (y-1)) * HEX_HEIGHT + (HEX_OFFSET_Y * (y-1))
 
     if y % 2 == 0 then worldx = worldx + hex_width/2 + HEX_OFFSET_X/2 end
 
@@ -55,7 +56,7 @@ function Map:init(width, height)
     local window_height = love.graphics.getHeight()
 
     local map_width = width * hex_width + (width-1) * HEX_OFFSET_X
-    local map_height = height * hex_height * 3/4 + (width-1) * HEX_OFFSET_Y
+    local map_height = height * hex_height * 3/4 * HEX_HEIGHT + (width-1) * HEX_OFFSET_Y
 
     local startx = window_width / 2 - map_width / 2 + hex_width / 2 + map_offset_x
     local starty = window_height / 2 - map_height / 2 + hex_height / 2 + map_offset_y
@@ -73,8 +74,8 @@ function Map:init(width, height)
     self.height = height
 
     self.highlighted = nil
-    self.entering_tile = nil
-    self.leaving_tile = nil
+    -- self.entering_tile = nil
+    -- self.leaving_tile = nil
     self.showing_range = false
 end
 
@@ -97,8 +98,8 @@ end
 -- end
 
 function Map:update(dt)
-    self.entering_tile = nil
-    self.leaving_tile = nil
+    -- self.entering_tile = nil
+    -- self.leaving_tile = nil
 
     self:check_highlight_tile(love.mouse.getPosition())
 
@@ -126,15 +127,16 @@ function Map:check_highlight_tile(x, y)
 
     if is_inside then return end
 
+    local leaving_tile
+    local entering_tile
     -- if there is highlighted tile, then cursor left it
     if self.highlighted then
-        self.leaving_tile = self.highlighted
+        leaving_tile = self.highlighted
 
         if BattleState.state == 'waiting' or BattleState.state == 'spell' then
             self.highlighted:hide_path()
         end
 
-        -- self.highlighted:unhighlight()
         self.highlighted = nil
     end
 
@@ -146,18 +148,21 @@ function Map:check_highlight_tile(x, y)
 
         if is_inside then
             self.highlighted = tile
-            self.entering_tile = tile
+            entering_tile = tile
         end
 
         tile:change_color()
     end
 
-    if self.leaving_tile then
-        local leaving_tile = self.leaving_tile
-        -- print('Leaving tile '..self.leaving_tile.tx..'/'..self.leaving_tile.ty)
+    if leaving_tile then
+        -- local leaving_tile = self.leaving_tile
+        -- print('Leaving tile '..leaving_tile.tx..'/'..leaving_tile.ty)
         if self.showing_range then
-            self.showing_range = false
             BattleState:cancel_target_mode()
+            leaving_tile:hide_path()
+            
+            self.highlighted = entering_tile
+            self.showing_range = false
         end
 
         if leaving_tile.actor then
@@ -166,9 +171,9 @@ function Map:check_highlight_tile(x, y)
         end
     end
     
-    if self.entering_tile then
-        local entering_tile = self.entering_tile
-        -- print('Entering tile '..self.entering_tile.tx..'/'..self.entering_tile.ty)
+    if entering_tile then
+        -- local entering_tile = self.entering_tile
+        -- print('Entering tile '..entering_tile.tx..'/'..entering_tile.ty)
         self:cursor_enters_tile(entering_tile)
         
         if entering_tile.actor then
@@ -219,9 +224,9 @@ function Map:cursor_enters_tile(tile)
         end
     end
     
-    -- if state == 'waiting' and tile.actor and tile.actor ~= actor then
-    --     self:show_actor_movement_range(tile)
-    -- end
+    if state == 'waiting' and tile.actor and tile.actor ~= actor then
+        self:show_actor_movement_range(tile)
+    end
 
     if state == 'drawing_path' then
         if tile ~= self.last_tile then
@@ -239,6 +244,8 @@ function Map:show_actor_movement_range(tile)
     local actor = tile.actor
     local open_nodes = {}
     
+    local can_be_selected = tile.can_be_selected
+    local range = tile.range
     self:reset_nodes()
 
     BattleState.pathfinder:calculate(tile, actor.movement_range, true, false)
@@ -246,6 +253,7 @@ function Map:show_actor_movement_range(tile)
     for _, node in pairs(self.tiles._props) do
         if node.is_open then
             open_nodes[#open_nodes+1] = node
+            node.show_as_range = true
         end
     end
 
@@ -255,10 +263,13 @@ function Map:show_actor_movement_range(tile)
         node.show_as_range = true
         node:change_color()
     end
-
-    -- tile.cursor_inside = true
+    
     self.showing_range = true
     self.highlighted = tile
+
+    tile.can_be_selected = can_be_selected
+    tile.range = range
+    tile:change_color()
 end
 
 function Map:update_drawing_path(tile)

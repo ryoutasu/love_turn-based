@@ -91,7 +91,7 @@ local function new_outliner(outline_only)
 // This parameter affects the roundness. 0.75 is close to the Euclidean
 // correct value. If it's 0.0, the shape of the "brush" making the outline
 // will be a diamond; if it's 1.0, it will be a square.
-const float t = 0.0;
+const float t = 0.75;
 
 extern vec3 outline; // Outline R,G,B
 extern vec2 stepSize; // Distance parameter
@@ -105,25 +105,26 @@ vec4 effect( vec4 col, Image texture, vec2 texturePos, vec2 screenPos )
 {
 
   // get color of pixels:
-  float alpha = -20.0 * texture2D(texture, clamp(texturePos, q1, q2)).a;
+  float alpha = Texel(texture, clamp(texturePos, q1, q2)).a;
   vec2 aux = vec2(stepSize.x, 0.);
-  alpha += texture2D(texture, clamp(texturePos + aux, q1, q2) ).a;
-  alpha += texture2D(texture, clamp(texturePos - aux, q1, q2) ).a;
+  alpha += Texel(texture, clamp(texturePos + aux, q1, q2) ).a;
+  alpha += Texel(texture, clamp(texturePos - aux, q1, q2) ).a;
   aux = vec2(0., stepSize.y);
-  alpha += texture2D(texture, clamp(texturePos + aux, q1, q2) ).a;
-  alpha += texture2D(texture, clamp(texturePos - aux, q1, q2) ).a;
+  alpha += Texel(texture, clamp(texturePos + aux, q1, q2) ).a;
+  alpha += Texel(texture, clamp(texturePos - aux, q1, q2) ).a;
 
   if (t != 0.0)
   {
     aux = stepSize;
-    alpha += t * texture2D(texture, clamp(texturePos + aux, q1, q2)).a;
-    alpha += t * texture2D(texture, clamp(texturePos - aux, q1, q2)).a;
+    alpha += t * Texel(texture, clamp(texturePos + aux, q1, q2)).a;
+    alpha += t * Texel(texture, clamp(texturePos - aux, q1, q2)).a;
     aux = vec2(-stepSize.x, stepSize.y);
-    alpha += t * texture2D(texture, clamp(texturePos + aux, q1, q2)).a;
-    alpha += t * texture2D(texture, clamp(texturePos - aux, q1, q2)).a;
+    alpha += t * Texel(texture, clamp(texturePos + aux, q1, q2)).a;
+    alpha += t * Texel(texture, clamp(texturePos - aux, q1, q2)).a;
   }
 
-@calc_result@
+  @calc_result@
+
   return result;
 }
   ]]
@@ -137,7 +138,7 @@ vec4 effect( vec4 col, Image texture, vec2 texturePos, vec2 screenPos )
     shader = shader:gsub("@calc_result@", [[
   vec4 result =
       max(max(sign(alpha), 0.) * vec4( outline, alpha ), zero)
-    - min(min(sign(alpha), 0.) * texture2D(texture, texturePos), zero);
+    - min(min(sign(alpha), 0.) * Texel(texture, texturePos), zero);
 ]])
   end
   shader = love.graphics.newShader(shader)

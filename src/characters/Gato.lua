@@ -3,7 +3,7 @@ return {
     sprite_path = 'resources/cat.png',
     rect = { 48, 48, 48, 48 },
 
-    health = 80,
+    max_health = 80,
     damage = 5,
     attack_range = 3,
     move_range = 2,

@@ -38,7 +38,7 @@ function Catcher:update(dt)
     self.progress = self.time / fillTime
 
     if self.progress > 0.2 then
-        if self.target.health > self.target.maxHealth * 0.3 then
+        if self.target.health > self.target.max_health * 0.3 then
             local rnd = math.random()
             if rnd < self.progress then
                 Tagtext:add('\'mon freed!', self.x, self.y, 2, 30, { 1, 1, 1 })

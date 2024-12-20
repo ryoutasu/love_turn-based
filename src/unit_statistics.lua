@@ -1,8 +1,8 @@
 local Statistics = Class{}
 
-function Statistics:init(health, damage, attack_range, movement_range, initiative)
-    self.maxHealth = health
-    self.health = health
+function Statistics:init(max_health, damage, attack_range, movement_range, initiative)
+    self.max_health = max_health
+    self.health = max_health
 
     self.damage = damage
     self.attack_range = attack_range
@@ -10,6 +10,24 @@ function Statistics:init(health, damage, attack_range, movement_range, initiativ
     self.initiative = initiative or 1
 
     self.movement_range = movement_range or 5
+end
+
+function Statistics:add_stat(name, value)
+    if self[name] then
+        self:set(name, self[name] + value)
+    end
+end
+
+function Statistics:set(name, value)
+    if name == 'health' then
+        value = math.min(value, self.max_health)
+    end
+
+    self[name] = value
+    
+    if self.character_reference then
+        self.character_reference[name] = value
+    end
 end
 
 return Statistics

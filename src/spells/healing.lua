@@ -10,6 +10,7 @@ local Healing = Class{
         end
         return false
     end,
+    element = 'life'
 }
 
 function Healing:init(caster, target)

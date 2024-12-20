@@ -3,19 +3,17 @@ local pathfinder = require 'src.pathfinder'
 local queue = require 'src.actorQueue'
 local panel = require 'src.commandPanel'
 local Unit = require 'src.objects.unit'
-local sprite = require 'src.sprite'
 local inventory = require 'src.inventory'
 
 local move = require 'src.actions.move'
 local attack = require 'src.actions.attack'
 local ai_wait = require 'src.actions.ai_wait'
-local spell = require 'src.actions.spell'
-local item = require 'src.actions.item'
 local Actions = require 'src.actions'
 
 local characterList = require 'src.characters'
-local spellList = require 'src.spells'
-local itemList = require 'src.items'
+
+local fontSize = 14
+local font = love.graphics.newFont(fontSize)
 
 local BattleState = {}
 
@@ -58,7 +56,7 @@ function BattleState:enter(from, args)
     self.result = nil
     self.paused = false
 
-    self.map = map(10, 8)
+    self.map = map(8, 6)
     self.pathfinder = pathfinder(self.map)
     self.queue = queue(230, love.graphics.getHeight() - 210)
 
@@ -70,7 +68,7 @@ function BattleState:enter(from, args)
     self.action_complete = false
 
     self.player = args.player
-    self.inventory = inventory(50, 30, self.player.inventory, args.type)
+    self.inventory = inventory(100, 10, self.player.inventory, args.type)
 
     local ranged_i = 1
     local melee_i = 1
@@ -88,7 +86,11 @@ function BattleState:enter(from, args)
     -- self:add_unit(4, 3, 'Bat', false)
     local x = math.random(self.map.width - 2, self.map.width)
     local y = math.random(1, self.map.height)
-    self:add_unit(x, y, 'Bat', false)
+    if math.random(10) > 5 then
+        self:add_unit(x, y, 'Quillpaw', false)
+    else
+        self:add_unit(x, y, 'Dewscale', false)
+    end
 
     self:start_turn()
 end
@@ -102,34 +104,7 @@ function BattleState:add_unit(x, y, table_or_name, is_player, do_change_characte
     local node = self.map:get_node(x, y)
     if not node or node.is_blocked then return false end
     
-    local rect = character_table.rect
-    local u = Unit(node, sprite(character_table.sprite_path), rect[1], rect[2], rect[3], rect[4], is_player)
-
-    u.name = character_table.name
-    
-    u.sprite_sx = character_table.sprite_sx or 1
-    u.sprite_sy = character_table.sprite_sy or 1
-    
-    u:set_statistics(
-        character_table.health,
-        character_table.damage,
-        character_table.attack_range,
-        character_table.move_range,
-        character_table.initiative
-    )
-
-    if character_table.current_health then
-        u.health = character_table.current_health
-    end
-
-    for _, spellname in ipairs(character_table.spells) do
-        u:add_spell(spellList[spellname])
-        -- u:add_spell(spellname)
-    end
-
-    if do_change_character then
-        u.character_reference = table_or_name
-    end
+    local u = Unit(node, is_player):setup(character_table, do_change_character)
 
     table.insert(self.units, u)
     self.queue:add_actor(u)
@@ -253,7 +228,7 @@ function BattleState:open_attack_move(actor, node)
 
     self.pathfinder:calculate(node, actor.movement_range, false, actor.attack_range == 1)
     self.pathfinder:calculate_range(node, actor.attack_range)
-    
+
     -- if self.map.highlighted and not self.map.highlighted.actor.is_player then
     --     self.map:cursor_enters_tile(self.map.highlighted)
     -- end
@@ -391,6 +366,13 @@ function BattleState:update(dt)
     end
 
     self.map:update(dt)
+    
+    local actor = self.map.highlighted and self.map.highlighted.actor or nil
+    table.sort(self.units, function (a, b)
+        if a == actor then return false end
+        if b == actor then return true end
+        return a.y < b.y
+    end)
     for i, unit in ipairs(self.units) do
         unit:update(dt)
     end
@@ -407,9 +389,13 @@ function BattleState:draw()
         end
     end
 
+    love.graphics.setLineWidth(1)
+    local actor = self.map.highlighted and self.map.highlighted.actor or nil
     for _, unit in ipairs(self.units) do
         if not unit.is_dead then
+            if unit == actor then unit:draw_outline(0.75, 0.75, 0.75) end
             unit:draw()
+            unit:draw_health(unit.node.x, unit.node.y)
         end
     end
 
@@ -418,19 +404,34 @@ function BattleState:draw()
         current_action:draw()
     end
     
-    for _, unit in ipairs(self.units) do
-        unit:draw_health(unit.x, unit.y)
-        unit:draw_name()
-    end
-
-    -- local x, y = 10, 10
-    -- for pos, item in pairs(self.player.inventory) do
-        
+    -- love.graphics.setLineWidth(1)
+    -- for _, unit in ipairs(self.units) do
+    --     unit:draw_health(unit.node.x, unit.node.y)
+    --     unit:draw_name()
     -- end
-
     self.u:draw()
     self.queue:draw()
     self.inventory:draw()
+
+    if self.current_spell then
+        local w, h = self.inventory.w, self.inventory.h
+        local x, y = self.inventory.x + w + 10, self.inventory.y
+
+        local text = 'Casting: ' .. self.current_spell.name
+        local textW = font:getWidth(text)
+        local textH = font:getHeight(text)
+
+        local padding = 4
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.rectangle('fill', x, y, textW + padding + padding, textH + padding + padding)
+        
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.rectangle('line', x, y, textW + padding + padding, textH + padding + padding)
+
+        love.graphics.setFont(font)
+        PrintText(text, x + padding, y + padding)
+    end
 end
 
 function BattleState:mousepressed(x, y, button)
@@ -467,7 +468,6 @@ function BattleState:mousepressed(x, y, button)
         if --[[ actor.is_player and ]] self.state == 'waiting' then
             local tile = self.map.highlighted
             if tile then
-
                 if tile.is_open then
                     self.state = 'acting'
                     self:add_action(move(actor, tile:get_path(), self.pathfinder))
@@ -508,6 +508,7 @@ function BattleState:keypressed(key, scancode, isrepeat)
     if key == 'escape' then
         if self.state == 'target' then
             self:cancel_target_mode()
+            self.panel:show_cancel_button(false)
         end
         if self.state == 'drawing_path' then
             self.map:stop_drawing_path()

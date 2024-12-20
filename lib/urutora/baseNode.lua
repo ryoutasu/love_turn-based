@@ -254,6 +254,14 @@ function baseNode:performPressedAction(data)
       self:update()
       self.callback({ target = self, value = self.value })
     end
+    -- if utils.isButton(self) then
+    --   love.audio.play(ButtonClickSound)
+    -- end
+    if self.pressSound then
+      local source = love.audio.newSource(self.pressSound, 'static')
+      love.audio.play(source)
+      -- love.audio.play(self.pressSound)
+    end
   end
 end
 

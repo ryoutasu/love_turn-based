@@ -55,7 +55,7 @@ end
 
 function RestState:rest()
     for i, character in ipairs(self.player.party) do
-        character.current_health = math.min(character.current_health + character.health * 0.35, character.health)
+        character.health = math.min(character.health + character.max_health * 0.35, character.max_health)
     end
 
     self.restButton:disable()
@@ -65,6 +65,7 @@ end
 
 function RestState:update(dt)
     self.u:update(dt)
+    self.characterList:update(dt)
 end
 
 function RestState:draw()

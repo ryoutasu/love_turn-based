@@ -39,6 +39,7 @@ function MainMenu:init()
         w = startGameButtonW, h = startGameButtonH,
         text = 'Start game',
         align = 'center',
+        pressSound = ButtonClickSound
     }):action(function (e)
         -- Gamestate.switch(CharacterSelect)
         Gamestate.push(CharacterSelect)

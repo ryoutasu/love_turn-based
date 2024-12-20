@@ -34,6 +34,7 @@ function Tile:init(x, y, tx, ty, cost)
 end
 
 function Tile:reset()
+    -- self:hide_path()
     self.parent = nil
     self.drawing_path_parent = nil
     self.is_open = false
@@ -48,41 +49,9 @@ function Tile:reset()
 end
 
 function Tile:change_color()
-    -- if self.is_open and self.cursor_inside then
-    --     self.color_id = COLOR_ID.BRIGHT_YELLOW
-
-    -- elseif self.is_open then
-    --     self.color_id = COLOR_ID.YELLOW
-
-    -- elseif self.acting and self.cursor_inside then
-    --     self.color_id = COLOR_ID.LIGHT_GREEN
-
-    -- elseif self.acting then
-    --     self.color_id = COLOR_ID.GREEN
-
-    -- elseif self.can_be_selected and self.cursor_inside then
-    --     self.color_id = COLOR_ID.RED
-        
-    -- elseif self.can_be_selected then
-    --     self.color_id = COLOR_ID.BRIGHT_RED
-
-    -- else
-    --     if self.cursor_inside then
-    --         self.color_id = COLOR_ID.DARK_GREY
-    --     else
-    --         self.color_id = COLOR_ID.TRANSPARENT_GREY
-    --     end
-    -- end
-    
     local color
-    if self.is_open and self.show_as_range then
-        color = TILE_COLOR[COLOR_ID.SHADE_DARK_GREEN]
-    elseif self.is_open or self.aoe_target then
+    if self.is_open or self.aoe_target then
         color = TILE_COLOR[COLOR_ID.SHADE_GREEN]
-    elseif self.show_as_range then
-        color = TILE_COLOR[COLOR_ID.SHADE_LIGHT_BLUE]
-    -- elseif self.acting then
-    --     color = TILE_COLOR[COLOR_ID.GREEN]
     elseif self.can_be_selected then
         color = TILE_COLOR[COLOR_ID.BRIGHT_RED]
     else
@@ -167,14 +136,14 @@ function Tile:update(dt)
     end
 end
 
-local function get_hex_points(x, y)
+local function get_hex_points(x, y, radius)
     local points = {}
     for i = 0, 5 do
         local angle_deg = 60 * i + 30
 		local angle_rad = math.pi / 180 * angle_deg
 
-		local px = x + HEX_RADIUS * math.cos(angle_rad)
-		local py = y + HEX_RADIUS * math.sin(angle_rad)
+		local px = x + radius * math.cos(angle_rad)
+		local py = y + radius * math.sin(angle_rad) * HEX_HEIGHT
 
         table.insert(points, px)
         table.insert(points, py)
@@ -191,7 +160,7 @@ local function get_borders_points(x, y, n)
 		local angle_rad = math.pi / 180 * angle_deg
 
 		local px = x + (HEX_RADIUS + HEX_OFFSET_X/2) * math.cos(angle_rad)
-		local py = y + (HEX_RADIUS + HEX_OFFSET_Y/2) * math.sin(angle_rad)
+		local py = y + (HEX_RADIUS + HEX_OFFSET_Y/2) * math.sin(angle_rad) * HEX_HEIGHT
 
         table.insert(points, px)
         table.insert(points, py)
@@ -202,7 +171,7 @@ end
 
 function Tile:draw()
     local x, y = self.x, self.y
-    local points = get_hex_points(x, y)
+    local points = get_hex_points(x, y, HEX_RADIUS)
     -- local color = TILE_COLOR[self.color_id]
     love.graphics.setLineWidth(1.5)
 
@@ -222,6 +191,12 @@ function Tile:draw()
             love.graphics.setColor(1, 0, 0, 1)
             love.graphics.line(points)
         end
+    end
+
+    if self.show_as_range then
+        local points = get_hex_points(x, y, HEX_RADIUS / 2)
+        love.graphics.setColor(TILE_COLOR[COLOR_ID.YELLOW])
+        love.graphics.polygon('fill', points)
     end
     
     love.graphics.setLineWidth(1)

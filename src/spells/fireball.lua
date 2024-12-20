@@ -4,6 +4,8 @@ local imageData = love.image.newImageData(1, 1)
 imageData:setPixel(0,0, 1,1,1,1)
 local image = love.graphics.newImage(imageData)
 
+local multiplier = 1.5
+
 local Fireball = Class{
     name = 'Fireball',
     type = 'unit',
@@ -14,6 +16,7 @@ local Fireball = Class{
         end
         return false
     end,
+    element = 'fire'
 }
 
 local speed = 500
@@ -78,7 +81,8 @@ function Fireball:update(dt)
     
     particle.toRemove = true
 
-    self.target:take_damage(self.caster, 200)
+    local damage = self.caster.damage * multiplier
+    self.target:take_damage(self.caster, damage)
     
     return true
 end

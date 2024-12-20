@@ -4,9 +4,15 @@ local gen = require 'src.levelgenerator'
 
 local offset = 75
 
+local Inventory = require 'src.levelmap.inventory'
 local Player = require 'src.player'
 local Node = require 'src.levelmap.node'
 local CharacterList = require 'src.characterList'
+
+local Item = require 'src.actions.item'
+
+local fontSize = 14
+local font = love.graphics.newFont(fontSize)
 
 local Path = Class{}
 
@@ -34,6 +40,7 @@ function Levelmap:init()
     self.pathes = {}
     self.currentNode = nil
     self.characterList = CharacterList(10, 10)
+    self.inventory = Inventory(100, 10)
 end
 
 function Levelmap:enter(from, args)
@@ -51,6 +58,7 @@ function Levelmap:enter(from, args)
     self.player:addItem('catcher', 2)
     self.player:addItem('healPotion', 2)
     self.characterList:setup(self.player.party)
+    self.inventory:setup(self.player.inventory)
 
     self.generator = gen()
     self.generator:generate(150, love.graphics.getWidth() - offset*2, love.graphics.getHeight() - offset*2)
@@ -105,6 +113,10 @@ function Levelmap:enter(from, args)
 
         table.insert(self.nodes, node)
     end
+
+    self.currentSpell = nil
+    self.mode = 'none'
+    self.currentAction = nil
 end
 
 function Levelmap:resume(from, args)
@@ -131,6 +143,9 @@ function Levelmap:resume(from, args)
     self.currentNode = nil
     
     self.characterList:setup(self.player.party)
+    self.inventory:setup(self.player.inventory)
+
+    self:cancel_target_mode()
 end
 
 function Levelmap:openNeighborNodes(node)
@@ -153,10 +168,29 @@ function Levelmap:openNeighborNodes(node)
     end
 end
 
+function Levelmap:set_target_mode(spell)
+    self.mode = 'target'
+    self.currentSpell = spell
+    self.characterList.showBox = true
+end
+
+function Levelmap:cancel_target_mode()
+    self.mode = 'none'
+    self.currentSpell = nil
+    self.characterList.showBox = false
+end
+
 function Levelmap:update(dt)
     for _, node in ipairs(self.nodes) do
         node:update(dt)
     end
+    self.characterList:update(dt)
+    self.inventory:update(dt)
+
+    -- if self.currentAction then
+    --     local complete = self.currentAction:update(dt)
+    --     if complete then self.currentAction = nil end
+    -- end
 end
 
 function Levelmap:draw()
@@ -168,19 +202,63 @@ function Levelmap:draw()
     end
 
     self.characterList:draw()
+    self.inventory:draw()
+
+    -- if self.currentAction then
+    --     self.currentAction:draw()
+    -- end
+    if self.currentSpell then
+        local w, h = self.inventory.w, self.inventory.h
+        local x, y = self.inventory.x + w + 10, self.inventory.y
+
+        local text = 'Casting: ' .. self.currentSpell.name
+        local textW = font:getWidth(text)
+        local textH = font:getHeight(text)
+
+        local padding = 4
+
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.rectangle('fill', x, y, textW + padding + padding, textH + padding + padding)
+        
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.rectangle('line', x, y, textW + padding + padding, textH + padding + padding)
+
+        love.graphics.setFont(font)
+        PrintText(text, x + padding, y + padding)
+    end
 end
 
 function Levelmap:mousepressed(x, y, button)
     for _, node in ipairs(self.nodes) do
-        if node.cursorInside and node.isOpen then
-            self.currentNode = node
-
-            if node.isCompleted then
-                self:openNeighborNodes(node)
+        if node.cursorInside then
+            if node.isOpen then
+                self.currentNode = node
+    
+                if node.isCompleted then
+                    self:openNeighborNodes(node)
+                else
+                    Gamestate.push(node:getGamestate(), { player = self.player, type = node.type })
+                end
+    
+                PlaySound(ButtonClickSound)
             else
-                Gamestate.push(node:getGamestate(), { player = self.player, type = node.type })
+                PlaySound(ErrorSound, 0.4)
             end
         end
+    end
+
+    if self.mode == 'target' and self.characterList.highlighted and self.currentSpell then
+        -- self.currentAction = 
+        Item(self.player, self.currentSpell, self.characterList.highlighted)
+        self:cancel_target_mode()
+    end
+
+    self.inventory:mousepressed()
+end
+
+function Levelmap:keypressed(key)
+    if key == 'escape' then
+        self:cancel_target_mode()
     end
 end
 

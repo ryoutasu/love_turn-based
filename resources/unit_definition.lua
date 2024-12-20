@@ -4,7 +4,7 @@ local animation = require 'src.animation'
 
 local fireball = require 'src.spells.fireball'
 local healing = require 'src.spells.healing'
-local slash = require 'src.spells.slash'
+local slash = require 'src.spells.claws'
 local earthquake = require 'src.spells.earthquake'
 
 return {

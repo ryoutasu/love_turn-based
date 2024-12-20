@@ -18,7 +18,7 @@ function Attack:start()
 
     self.tween = tween.new(attack_time, actor, { x = target.x, y = target.y }, 'inBack')
     self.attacking = true
-    target.node.can_be_attacked = false
+    target.node.can_be_selected = false
 
     Tagtext:add('Attack', self.actor.x - 25, self.actor.y - 40, 2, 30, { 1, 1, 1 })
 end

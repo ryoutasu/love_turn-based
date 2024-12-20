@@ -1,7 +1,10 @@
 DEBUG = false
+CHARACTERS_SCALE = 0.6
 
 require 'utils'
+require 'sounds'
 
+Ripple = require 'lib.ripple'
 Class = require 'lib.class'
 Gamestate = require 'lib.gamestate'
 Vector = require 'lib.vector'

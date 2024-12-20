@@ -5,11 +5,11 @@ local frameFillColor = { love.math.colorFromBytes(39, 170, 225) }
 local frameLineColor = { love.math.colorFromBytes(20, 140, 200) }
 local frameSelectLineColor = { love.math.colorFromBytes(10, 70, 100) }
 
-local defualtFont = love.graphics.newFont(14)
-local bigFont = love.graphics.newFont(18)
+local defualtFont = love.graphics.newFont(20)
+local bigFont = love.graphics.newFont(24)
 
 local frameY = 300
-local frameWidth = 200
+local frameWidth = 220
 local frameHeight = 350
 
 local Frame = Class{}
@@ -70,24 +70,30 @@ function Frame:update(dt)
     end
 end
 
+local corner = 10
 function Frame:draw()
     love.graphics.setColor(frameFillColor)
-    love.graphics.rectangle('fill', self.x, self.y, self.w, self.h)
+    love.graphics.rectangle('fill', self.x, self.y, self.w, self.h, corner, corner)
     if self.selected then
         love.graphics.setLineWidth(4)
         love.graphics.setColor(frameSelectLineColor)
     else
-        love.graphics.setLineWidth(1)
+        love.graphics.setLineWidth(2)
         love.graphics.setColor(frameLineColor)
     end
-    love.graphics.rectangle('line', self.x, self.y, self.w, self.h)
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setFont(self.font)
-    love.graphics.print(self.name, self.x + 10, self.y + 10)
+    love.graphics.rectangle('line', self.x, self.y, self.w, self.h, corner, corner)
 
     love.graphics.setColor(1, 1, 1, 1)
     local x, y = self.cx - self.sprite.w / 2 * self.scale, self.cy - self.sprite.h / 2 * self.scale + 50
     self.sprite:draw(_, x, y, 0, self.scale, self.scale)
+
+    local textW = self.font:getWidth(self.name)
+
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setFont(self.font)
+    PrintText(self.name, self.cx - textW / 2 - 4, self.y + 10)
+    -- love.graphics.print(self.name, self.cx - textW / 2, self.y + textH)
+    -- love.graphics.print(self.name, self.x, self.y)
 
     love.graphics.setLineWidth(1)
 end
@@ -132,8 +138,8 @@ function CharacterSelect:enter()
 
     self.frames = {}
 
-    local frame_1 = Frame(320, frameY, 'Leafen')
-    local frame_2 = Frame(640, frameY, 'Emberpuff')
+    local frame_1 = Frame(320, frameY, 'Emberpuff')
+    local frame_2 = Frame(640, frameY, 'Leafen')
     local frame_3 = Frame(960, frameY, 'Terrow')
 
     table.insert(self.frames, frame_1)
@@ -146,6 +152,7 @@ function CharacterSelect:enter()
         x = x, y = y,
         w = w, h = h,
         text = 'Select',
+        pressSound = ButtonClickSound
     }):action(function (e)
         print('Seed: ' .. self.seedText.text)
         Gamestate.switch(Levelmap, { seed = tonumber(self.seedText.text), character = self.selectedFrame.name })
@@ -190,6 +197,8 @@ function CharacterSelect:mousepressed(x, y, button)
         end
         selectedFrame.selected = true
         self.selectedFrame = selectedFrame
+
+        PlaySound(ButtonClickSound)
     end
 
     -- if not self.selectedFrame then

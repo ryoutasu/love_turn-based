@@ -17,7 +17,7 @@ local currentSize = 1.2
 local currentY = panelY - 50
 local currentX = panelX - (panelWidth * currentSize - panelWidth)
 
-local defualtFont = love.graphics.newFont(11)
+local defualtFont = love.graphics.newFont(12)
 local currentFont = love.graphics.newFont(14)
 
 local tween_time = 0.5
@@ -92,7 +92,8 @@ function Panel:draw()
     love.graphics.setFont(self.isCurrent and currentFont or defualtFont)
     love.graphics.setColor(1, 1, 1, self.a)
     local offset = math.floor(8 * self.size)
-    love.graphics.print(self.actor.name, self.x + offset, self.y + offset)
+    -- love.graphics.print(self.actor.name, self.x + offset, self.y + offset)
+    PrintText(self.actor.name, self.x + offset, self.y + offset)
 end
 
 local Queue = Class{}

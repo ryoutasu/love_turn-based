@@ -26,7 +26,9 @@ function Item:update(dt)
     local complete = self.item:update(dt)
 
     if complete then
-        self.target:set_animation()
+        if self.target.set_animation then
+            self.target:set_animation()
+        end
     end
 
     return complete

@@ -3,17 +3,17 @@ local ItemList = require 'src.items'
 
 local function setupCharacter(name)
     local character_table = Characters[name]
-    local result = {}
+    local character = {}
 
     for key, value in pairs(character_table) do
-        result[key] = value
+        character[key] = value
     end
 
-    if result.health then
-        result.current_health = result.health
+    if character.max_health then
+        character.health = character.max_health
     end
 
-    return result
+    return character
 end
 
 local Player = Class{}

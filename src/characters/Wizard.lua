@@ -3,7 +3,7 @@ return {
     sprite_path = 'resources/wizard.png',
     rect = { 32, 48, 96, 192 },
 
-    health = 90,
+    max_health = 90,
     damage = 8,
     attack_range = 4,
     move_range = 3,
