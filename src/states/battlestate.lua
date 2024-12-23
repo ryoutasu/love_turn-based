@@ -4,6 +4,8 @@ local queue = require 'src.actorQueue'
 local panel = require 'src.commandPanel'
 local Unit = require 'src.objects.unit'
 local inventory = require 'src.inventory'
+local Sprite = require 'src.sprite'
+local Tween = require 'lib.tween'
 
 local move = require 'src.actions.move'
 local attack = require 'src.actions.attack'
@@ -15,6 +17,12 @@ local characterList = require 'src.characters'
 local fontSize = 14
 local font = love.graphics.newFont(fontSize)
 
+local resultFontSize = 24
+local resultFont = love.graphics.newFont(resultFontSize)
+
+local rewardsFontSize = 18
+local rewardsFont = love.graphics.newFont(rewardsFontSize)
+
 local BattleState = {}
 
 function BattleState:init()
@@ -23,33 +31,67 @@ function BattleState:init()
     self.result = nil
     self.paused = false
 
-    local w, h = 200, 50
+    local w, h = 140, 55
     local x = love.graphics.getWidth()/2 - w/2
-    local y = love.graphics.getHeight()/2 - h/2
+    local y = love.graphics.getHeight()/2 - h/2 - 120
     local resultLabel = Urutora.label({
         x = x, y = y,
         w = w, h = h,
         text = '',
         align = 'center'
-    }):deactivate()
+    }):deactivate():setStyle({ font = resultFont })
+
+    self.rewards_w = resultLabel.w + 20
+    self.rewards_h = 0
+    self.rewards_x = love.graphics.getWidth()/2 - self.rewards_w/2
+    self.rewards_y = resultLabel.y + resultLabel.h + 10
     
     w, h = 100, 30
     x = love.graphics.getWidth()/2 - w/2
-    y = love.graphics.getHeight()/2 - h/2 + resultLabel.h + 10
+    y = self.rewards_y + 10
     local resultButton = Urutora.button({
         x = x, y = y,
         w = w, h = h,
         text = 'Continue',
-        align = 'center'
+        align = 'center',
     }):deactivate():action(function (e)
-        Gamestate.pop({ result = self.result })
-    end)
+        if self.state == 'result' then
+            if self.result == 'lose' then
+                Gamestate.pop({ result = self.result })
+            else
+                self.state = 'rewards'
+                resultLabel.text = 'Rewards:'
+
+                self.rewards_h = 0
+                self.rewards_tween = Tween.new(1, self, { rewards_h = 150 }, 'inOutCubic')
+                self.show_rewards_items = false
+                self.rewards_print_progress = 0
+
+                if self.type == 'wild' then
+                    table.insert(self.rewards, { currency = 'tokens', value = 10 })
+                elseif self.type == 'trainer' then
+                    table.insert(self.rewards, { currency = 'gold', value = 10 })
+                end
+
+                for index, reward in ipairs(self.rewards) do
+                    self.player:addCurrency(reward.currency, reward.value)
+                end
+            end
+        elseif self.state == 'rewards' then
+            Gamestate.pop({ result = self.result })
+        end
+    end):setStyle({ font = rewardsFont })
 
     self.u:add(resultLabel)
     self.u:add(resultButton)
 
     self.resultLabel = resultLabel
     self.resultButton = resultButton
+    self.background = Sprite('resources/background.jpg')
+
+    self.rewards_print_progress = 0
+    self.rewards_tween = nil
+    self.rewards = {}
 end
 
 function BattleState:enter(from, args)
@@ -59,6 +101,7 @@ function BattleState:enter(from, args)
     self.map = map(8, 6)
     self.pathfinder = pathfinder(self.map)
     self.queue = queue(230, love.graphics.getHeight() - 210)
+    self.type = args.type
 
     self.units = {}
     self.actions = {}
@@ -68,7 +111,7 @@ function BattleState:enter(from, args)
     self.action_complete = false
 
     self.player = args.player
-    self.inventory = inventory(100, 10, self.player.inventory, args.type)
+    self.inventory = inventory(100, 10, self.player.inventory)
 
     local ranged_i = 1
     local melee_i = 1
@@ -139,6 +182,14 @@ function BattleState:leave()
     self.action_complete = false
     
     self.result = nil
+
+    self.rewards_h = 0
+    self.show_rewards_items = false
+    
+    self.resultButton.y = self.rewards_y + 5
+    self.rewards_tween = nil
+    self.rewards_print_progress = 0
+    self.rewards = {}
 end
 
 function BattleState:current_actor()
@@ -179,6 +230,8 @@ function BattleState:check_result()
     if is_lose then
         self.result = 'lose'
     end
+
+    self.state = 'result'
 end
 
 function BattleState:showResult()
@@ -186,10 +239,10 @@ function BattleState:showResult()
     self.paused = true
 
     if self.result == 'win' then
-        self.resultLabel.text = 'You won!'
+        self.resultLabel.text = 'Victory!'
     end
     if self.result == 'lose' then
-        self.resultLabel.text = 'You lost...'
+        self.resultLabel.text = 'Defeat...'
     end
 
     self.resultLabel:activate()
@@ -351,7 +404,7 @@ function BattleState:handle_action(dt)
     if complete then
         table.remove(self.actions, 1)
         
-        if self.result then
+        if self.state == 'result' then
             self:showResult()
         end
     end
@@ -378,9 +431,27 @@ function BattleState:update(dt)
     end
     self.u:update(dt)
     self.inventory:update(dt)
+
+    if self.state == 'rewards' then
+        local complete = false
+        if self.rewards_tween then
+            complete = self.rewards_tween:update(dt)
+            self.resultButton.y = self.rewards_y + self.rewards_h + 10
+        end
+
+        if complete then
+            self.show_rewards_items = true
+            self.rewards_print_progress = self.rewards_print_progress + dt * 2
+        end
+    end
 end
 
 function BattleState:draw()
+    local size = 1.3
+    local window_width = love.graphics.getWidth()
+    local sprite_width = self.background.w * size
+    self.background:draw(_, window_width / 2 - sprite_width / 2, -260, 0, size, 1)
+
     self.map:draw()
 
     for _, unit in ipairs(self.units) do
@@ -390,10 +461,8 @@ function BattleState:draw()
     end
 
     love.graphics.setLineWidth(1)
-    local actor = self.map.highlighted and self.map.highlighted.actor or nil
     for _, unit in ipairs(self.units) do
         if not unit.is_dead then
-            if unit == actor then unit:draw_outline(0.75, 0.75, 0.75) end
             unit:draw()
             unit:draw_health(unit.node.x, unit.node.y)
         end
@@ -432,6 +501,20 @@ function BattleState:draw()
         love.graphics.setFont(font)
         PrintText(text, x + padding, y + padding)
     end
+
+    if self.state == 'rewards' then
+        love.graphics.setColor(0.3, 0.34, 0.5, 1)
+        love.graphics.rectangle('fill', self.rewards_x, self.rewards_y, self.rewards_w, self.rewards_h)
+
+        if self.show_rewards_items then
+            love.graphics.setFont(rewardsFont)
+            love.graphics.setColor(1, 1, 1, 1)
+            for index, reward in ipairs(self.rewards) do
+                local str = tostring(reward.value) .. ' ' .. reward.currency
+                PrintText(Badprint(str, self.rewards_print_progress), self.rewards_x + 8, self.rewards_y + 8)
+            end
+        end
+    end
 end
 
 function BattleState:mousepressed(x, y, button)
@@ -454,14 +537,6 @@ function BattleState:mousepressed(x, y, button)
                 self.current_spell = nil
             end
         end
-        -- if self.state == 'item' then
-        --     if tile and tile.can_be_selected then
-        --         self.state = 'acting'
-        --         self:add_action(item(self.player, self.current_spell, tile))
-        --         self.panel:show_cancel_button(false)
-        --         self.current_spell = nil
-        --     end
-        -- end
     end
 
     if button == 2 then

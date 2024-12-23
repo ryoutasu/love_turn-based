@@ -6,7 +6,7 @@ return {
     rect = { 140 * scale, 140 * scale, 140 * scale, 140 * scale },
     scale = scale,
 
-    max_health = 100,
+    max_health = 50,
     damage = 10,
     attack_range = 1,
     move_range = 4,

@@ -243,6 +243,7 @@ end
 function Map:show_actor_movement_range(tile)
     local actor = tile.actor
     local open_nodes = {}
+    local attack_nodes = {}
     
     local can_be_selected = tile.can_be_selected
     local range = tile.range
@@ -252,8 +253,10 @@ function Map:show_actor_movement_range(tile)
 
     for _, node in pairs(self.tiles._props) do
         if node.is_open then
-            open_nodes[#open_nodes+1] = node
-            node.show_as_range = true
+            table.insert(open_nodes, node)
+        end
+        if node.in_attack_range then
+            table.insert(attack_nodes, node)
         end
     end
 
@@ -262,6 +265,9 @@ function Map:show_actor_movement_range(tile)
     for _, node in pairs(open_nodes) do
         node.show_as_range = true
         node:change_color()
+    end
+    for _, node in pairs(attack_nodes) do
+        node.show_as_attack_range = true
     end
     
     self.showing_range = true
@@ -276,7 +282,7 @@ function Map:update_drawing_path(tile)
     local actor = BattleState:current_actor()
     local new_path = {}
     local cut_path = false
-    local last_tile = BattleState:current_actor().node
+    local last_tile = actor.node
     for _, node in ipairs(self.drawing_path) do
         if tile == node then
             self.last_tile:hide_path()
@@ -287,7 +293,7 @@ function Map:update_drawing_path(tile)
         last_tile = node
     end
 
-    if not (tile.is_open or tile.can_be_selected and actor.attack_range == 1 or cut_path) then
+    if not (tile.is_open or cut_path or (tile.can_be_selected and actor.attack_range == 1)) then
         return
     end
 
@@ -313,13 +319,14 @@ function Map:update_drawing_path(tile)
     end
 
     if tile.range == 1 and tile.can_be_selected then
-        tile.parent = last_tile
         tile:show_path()
         tile:set_animation('select', nil, { 1, 0, 0, 1 })
 
         self.last_tile:set_animation()
         self.last_tile = tile
         BattleState:recalculate_path(tile, 0)
+        
+        tile.parent = last_tile
 
         return
     end

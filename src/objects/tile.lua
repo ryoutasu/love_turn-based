@@ -26,7 +26,9 @@ function Tile:init(x, y, tx, ty, cost)
     self.path_sprite_rotation = 0
     self.can_be_selected = false
     self.range = nil
+    self.in_attack_range = false
     self.show_as_range = false
+    self.show_as_attack_range = false
     self.aoe_target = false
     self.borders = { false, false, false, false, false, false }
     
@@ -41,7 +43,9 @@ function Tile:reset()
     self.acting = false
     self.can_be_selected = false
     self.range = nil
+    self.in_attack_range = false
     self.show_as_range = false
+    self.show_as_attack_range = false
     self.aoe_target = false
     self.borders = { false, false, false, false, false, false }
 
@@ -195,7 +199,13 @@ function Tile:draw()
 
     if self.show_as_range then
         local points = get_hex_points(x, y, HEX_RADIUS / 2)
-        love.graphics.setColor(TILE_COLOR[COLOR_ID.YELLOW])
+        love.graphics.setColor(TILE_COLOR[COLOR_ID.BRIGHT_YELLOW])
+        love.graphics.polygon('fill', points)
+    end
+
+    if self.show_as_attack_range then
+        local points = get_hex_points(x, y, HEX_RADIUS / 2)
+        love.graphics.setColor(TILE_COLOR[COLOR_ID.BRIGHT_RED])
         love.graphics.polygon('fill', points)
     end
     

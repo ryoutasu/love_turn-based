@@ -21,6 +21,7 @@ local Player = Class{}
 function Player:init()
     self.party = {}
     self.inventory = {}
+    self.currencies = {}
 end
 
 function Player:addCharacter(name_or_table)
@@ -52,6 +53,12 @@ function Player:useItem(item, quantity)
             end
         end
     end
+end
+
+function Player:addCurrency(name, value)
+    local currency = self.currencies[name]
+    if not currency then self.currencies[name] = 0; currency = 0 end
+    self.currencies[name] = math.max(currency + value, 0)
 end
 
 return Player

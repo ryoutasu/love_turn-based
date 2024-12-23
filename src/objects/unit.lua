@@ -38,6 +38,7 @@ function Unit:init(node, is_player)
     self.is_dead = false
     self.show_name = false
     self.is_moving = false
+    self.outline = nil
 end
 
 function Unit:setup(character, do_change_character)
@@ -277,14 +278,14 @@ function Unit:draw_health(x, y)
     PrintText(healthString, tx, ty, rotation)
 end
 
-function Unit:draw_outline(r, g, b)
+function Unit:draw_outline(r, g, b, size)
     local x = self.x
     local y = self.y
     if not self.is_dead then y = y - HEX_RADIUS * 0.45 end
     if self.is_dead then y = y + HEX_RADIUS * 0.3 end
 
     self.shader:outline(r, g, b)
-    self.shader:draw(1, self.sprite.image, self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
+    self.shader:draw(size, self.sprite.image, self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
 end
 
 function Unit:draw()
@@ -295,9 +296,13 @@ function Unit:draw()
     if not self.is_dead then y = y - HEX_RADIUS * 0.45 end
     if self.is_dead then y = y + HEX_RADIUS * 0.3 end
 
+    if self.show_name then
+        self:draw_outline(1, 1, 1, 2)
+    end
+
     if self.acting then
         -- self.shader:draw(1, self.sprite.image, self.quad, x, y, 0, self.sprite_sx or 1, self.sprite_sy or 1, self.w*0.5, self.h*0.5)
-        self:draw_outline(0, 1, 0)
+        self:draw_outline(0, 1, 0, 1)
     end
 
     love.graphics.setColor(1, 1, 1, 1)

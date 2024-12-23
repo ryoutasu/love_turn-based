@@ -85,6 +85,9 @@ function Pathfinder:calculate(start, range, check_blocked, is_melee)
         if not current.is_blocked or current == start then
             if current ~= start and (range == nil or gscore[current] <= range) then
                 current:open_to_move()
+            elseif (range == nil or gscore[current] <= range + 1)
+            and current.parent and current.parent.is_open then
+                current.in_attack_range = true
             end
 
             local neighbors = self:get_neighbors(current)
@@ -103,12 +106,13 @@ function Pathfinder:calculate(start, range, check_blocked, is_melee)
                     end
                 end
             end
-        elseif is_melee and (range == nil or gscore[current] <= range + 1)
+        elseif (range == nil or gscore[current] <= range + 1)
         and current.parent and current.parent.is_open then
-            if current.actor and actor:enemy_to(current.actor) then
+            if is_melee and current.actor and actor:enemy_to(current.actor) then
                 current.can_be_selected = true
                 current:change_color()
             end
+            current.in_attack_range = true
         end
     end
 end

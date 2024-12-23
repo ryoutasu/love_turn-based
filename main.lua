@@ -1,3 +1,7 @@
+if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
+    require("lldebugger").start()
+end
+
 DEBUG = false
 CHARACTERS_SCALE = 0.6
 

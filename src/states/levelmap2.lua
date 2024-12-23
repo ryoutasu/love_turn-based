@@ -55,8 +55,9 @@ function Levelmap:enter(from, args)
 
     self.player = Player()
     self.player:addCharacter(characterName)
-    self.player:addItem('catcher', 2)
+    -- self.player:addItem('catcher', 2)
     self.player:addItem('healPotion', 2)
+    self.player:addCurrency('gold', 100)
     self.characterList:setup(self.player.party)
     self.inventory:setup(self.player.inventory)
 
@@ -78,7 +79,7 @@ function Levelmap:enter(from, args)
 
         local type = 'wild'
         if isStartingPoint then
-            type = 'start'
+            type = 'wild'
         elseif isEndingPoint then
             type = 'end'
         else
@@ -207,15 +208,33 @@ function Levelmap:draw()
     -- if self.currentAction then
     --     self.currentAction:draw()
     -- end
-    if self.currentSpell then
-        local w, h = self.inventory.w, self.inventory.h
-        local x, y = self.inventory.x + w + 10, self.inventory.y
 
+    local padding = 4
+    local w, h = self.inventory.w, self.inventory.h
+    local x, y = self.inventory.x + w + 10, self.inventory.y
+    for name, value in pairs(self.player.currencies) do
+        local text = name .. ': ' .. tostring(value)
+        local textW = font:getWidth(text) + padding + padding
+        local textH = font:getHeight(text) + padding + padding
+    
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.rectangle('fill', x, y, textW, textH)
+        
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.rectangle('line', x, y, textW, textH)
+
+        love.graphics.setFont(font)
+        love.graphics.setColor(0, 0, 0, 1)
+        PrintText(text, x + padding, y + padding)
+
+        x = x + textW + 10
+        -- w = textW
+    end
+    
+    if self.currentSpell then
         local text = 'Casting: ' .. self.currentSpell.name
         local textW = font:getWidth(text)
         local textH = font:getHeight(text)
-
-        local padding = 4
 
         love.graphics.setColor(1, 1, 1, 1)
         love.graphics.rectangle('fill', x, y, textW + padding + padding, textH + padding + padding)

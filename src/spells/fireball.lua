@@ -82,7 +82,7 @@ function Fireball:update(dt)
     particle.toRemove = true
 
     local damage = self.caster.damage * multiplier
-    self.target:take_damage(self.caster, damage)
+    self.target:take_damage(self.caster, 200)
     
     return true
 end
