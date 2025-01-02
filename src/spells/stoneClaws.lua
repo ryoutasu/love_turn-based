@@ -12,7 +12,8 @@ local StoneClaws = Class{
         end
         return false
     end,
-    element = 'stone'
+    element = 'stone',
+    cost = 2,
 }
 
 function StoneClaws:init(caster, target)

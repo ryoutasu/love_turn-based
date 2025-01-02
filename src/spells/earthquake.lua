@@ -12,7 +12,8 @@ local Earthquake = Class{
         -- return false
         return true
     end,
-    element = 'stone'
+    element = 'stone',
+    cost = 6,
 }
 
 function Earthquake:init(caster, target)

@@ -11,6 +11,7 @@ return {
     attack_range = 1,
     move_range = 4,
     initiative = 10,
+    max_energy = 20,
     spells = {
         'claws'
     },

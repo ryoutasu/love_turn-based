@@ -46,7 +46,7 @@ function BattleState:init()
     self.rewards_x = love.graphics.getWidth()/2 - self.rewards_w/2
     self.rewards_y = resultLabel.y + resultLabel.h + 10
     
-    w, h = 100, 30
+    w, h = 110, 40
     x = love.graphics.getWidth()/2 - w/2
     y = self.rewards_y + 10
     local resultButton = Urutora.button({
@@ -63,14 +63,14 @@ function BattleState:init()
                 resultLabel.text = 'Rewards:'
 
                 self.rewards_h = 0
-                self.rewards_tween = Tween.new(1, self, { rewards_h = 150 }, 'inOutCubic')
+                self.rewards_tween = Tween.new(0.75, self, { rewards_h = 150 }, 'inOutCubic')
                 self.show_rewards_items = false
                 self.rewards_print_progress = 0
 
                 if self.type == 'wild' then
                     table.insert(self.rewards, { currency = 'tokens', value = 10 })
                 elseif self.type == 'trainer' then
-                    table.insert(self.rewards, { currency = 'gold', value = 10 })
+                    table.insert(self.rewards, { currency = 'gold', value = 30 })
                 end
 
                 for index, reward in ipairs(self.rewards) do
@@ -530,11 +530,17 @@ function BattleState:mousepressed(x, y, button)
         if self.state == 'target' then
             if tile and tile.can_be_selected then
                 self.state = 'acting'
-                local action = Actions[self.action_type]
                 local a = self.action_type == 'item' and self.player or actor
-                self:add_action(action(a, self.current_spell, tile))
-                self.panel:show_cancel_button(false)
-                self.current_spell = nil
+                local action = Actions[self.action_type](a, self.current_spell, tile)
+                if not action.is_aborted then
+                    self:add_action(action)
+                    self.panel:show_cancel_button(false)
+                    self.current_spell = nil
+                else
+                    Tagtext:add('Not enough energy!', a.x - 25, a.y - 40, 2, 30, { 1, 1, 1 })
+                    self:cancel_target_mode()
+                    self.panel:show_cancel_button(false)
+                end
             end
         end
     end

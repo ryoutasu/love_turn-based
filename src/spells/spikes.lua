@@ -12,7 +12,8 @@ local Spikes = Class{
         end
         return false
     end,
-    element = 'stone'
+    element = 'stone',
+    cost = 3,
 }
 
 function Spikes:init(caster, target)

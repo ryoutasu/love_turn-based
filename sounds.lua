@@ -4,6 +4,7 @@
 ButtonClickSound = 'resources/Sounds/buttonClick.wav'
 CheckBoxSound = 'resources/Sounds/buttonClick.wav'
 ErrorSound = 'resources/Sounds/nope.wav'
+CoinsSound = 'resources/Sounds/coinsSound.wav'
 
 love.audio.setEffect("myEffect", { type="chorus" })
 

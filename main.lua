@@ -2,6 +2,8 @@ if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
     require("lldebugger").start()
 end
 
+love.window.setMode(1280, 720)
+
 DEBUG = false
 CHARACTERS_SCALE = 0.6
 
@@ -27,7 +29,6 @@ EventState = require 'src.states.eventstate'
 Levelmap = require 'src.states.levelmap2'
 
 function love.load()
-    love.window.setMode(1280, 720)
     -- Input.bind_callbacks()
     -- love.graphics.setDefaultFilter( 'nearest', 'nearest' )
     love.window.setTitle('Love Turn-Based')

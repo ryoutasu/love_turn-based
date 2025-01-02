@@ -16,7 +16,8 @@ local Spit = Class{
         end
         return false
     end,
-    element = 'normal'
+    element = 'normal',
+    cost = 2,
 }
 
 local speed = 350

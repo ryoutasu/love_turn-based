@@ -12,7 +12,8 @@ local Claws = Class{
         end
         return false
     end,
-    element = 'normal'
+    element = 'normal',
+    cost = 1,
 }
 
 function Claws:init(caster, target)

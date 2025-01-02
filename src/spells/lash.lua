@@ -12,7 +12,8 @@ local Lash = Class{
         end
         return false
     end,
-    element = 'nature'
+    element = 'nature',
+    cost = 2,
 }
 
 function Lash:init(caster, target)

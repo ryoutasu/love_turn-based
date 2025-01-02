@@ -36,7 +36,7 @@ function EventState:enter(from, args)
     -- end
     -- self.buttons = {}
 
-    local steps = Events.foundItem(args.player)
+    local steps = Events.buyItem(args.player)
     self.steps = steps
 
     self:setupStep(1)

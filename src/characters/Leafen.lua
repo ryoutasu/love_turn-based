@@ -12,6 +12,7 @@ return {
     move_range = 3,
     initiative = 7,
     armor = 1,
+    max_energy = 20,
 
     spells = {
         'spit',

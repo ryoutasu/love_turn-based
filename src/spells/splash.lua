@@ -16,7 +16,8 @@ local Splash = Class{
         end
         return false
     end,
-    element = 'water'
+    element = 'water',
+    cost = 3,
 }
 
 local color1 = { 0, 0, 1 }

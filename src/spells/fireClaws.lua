@@ -12,7 +12,8 @@ local FireClaws = Class{
         end
         return false
     end,
-    element = 'fire'
+    element = 'fire',
+    cost = 2,
 }
 
 function FireClaws:init(caster, target)

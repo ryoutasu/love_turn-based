@@ -19,10 +19,14 @@ local Path = Class{}
 function Path:init(edge)
     self.edge = edge
     self.isOpen = false
+    self.isCompleted = false
 end
 
 function Path:draw()
-    if self.isOpen then
+    if self.isCompleted then
+        love.graphics.setLineWidth(3)
+        love.graphics.setColor(0.3, 0.3, 0.3, 1)
+    elseif self.isOpen then
         love.graphics.setLineWidth(3)
         love.graphics.setColor(1, 1, 1, 1)
     else
@@ -70,9 +74,16 @@ function Levelmap:enter(from, args)
         edge.path = path
     end
 
-    local restNodes = 0
     local startPoint = self.generator.startPoint
     local endPoint = self.generator.endPoint
+    local rest_nodes = 0
+
+    local max_event_nodes = math.floor(#self.generator.points * 0.30)
+    local event_nodes = 0
+
+    local max_trainer_nodes = math.floor(#self.generator.points * 0.35)
+    local trainer_nodes = 0
+
     for i, point in ipairs(self.generator.points) do
         local isStartingPoint = point == startPoint
         local isEndingPoint = point == endPoint
@@ -95,13 +106,15 @@ function Levelmap:enter(from, args)
             local startNeighbor = self.generator:isNeighbors(point, startPoint)
             local endNeighbor = self.generator:isNeighbors(point, endPoint)
             local rand = math.random() * 100
-            if not startNeighbor and not endNeighbor and restNodes < 1 then
+            if not startNeighbor and not endNeighbor and rest_nodes < 1 then
                 type = 'rest'
-                restNodes = restNodes + 1
-            elseif rand <= 35 then
+                rest_nodes = rest_nodes + 1
+            elseif rand <= 35 and event_nodes < max_event_nodes then
                 type = 'event'
-            elseif rand > 35 and rand <= 50 then
+                event_nodes = event_nodes + 1
+            elseif rand <= 65 and trainer_nodes < max_trainer_nodes then
                 type = 'trainer'
+                trainer_nodes = trainer_nodes + 1
             end
         end
         
@@ -130,11 +143,11 @@ function Levelmap:resume(from, args)
             self.currentNode.isCompleted = true
         end
     elseif from == RestState then
-        if args.complete then
+        -- if args.complete then
             self.currentNode.isCompleted = true
-        else
-            self.currentNode.isOpen = true
-        end
+        -- else
+        --     self.currentNode.isOpen = true
+        -- end
     elseif from == EventState then
         self.currentNode.isCompleted = true
     else
@@ -152,21 +165,29 @@ end
 function Levelmap:openNeighborNodes(node)
     local currentPoint = node.point
 
-    for _, path in ipairs(self.pathes) do
-        path.isOpen = false
-    end
+    -- for _, path in ipairs(self.pathes) do
+    --     path.isOpen = false
+    -- end
 
     for _, other in ipairs(self.nodes) do
         local point = other.point
         local isNeighbors, edge = self.generator:isNeighbors(currentPoint, point)
+        -- if isNeighbors then
+        --     other.isOpen = true
+        --     other.isDiscovered = true
+        --     edge.path.isOpen = true
+        -- else
+        --     other.isOpen = false
+        -- end
         if isNeighbors then
-            other.isOpen = true
-            other.isDiscovered = true
-            edge.path.isOpen = true
-        else
-            other.isOpen = false
+            if not other.isCompleted then
+                other.isOpen = true
+                other.isDiscovered = true
+                edge.path.isOpen = true
+            end
         end
     end
+    node.isOpen = false
 end
 
 function Levelmap:set_target_mode(spell)
@@ -254,7 +275,7 @@ function Levelmap:mousepressed(x, y, button)
                 self.currentNode = node
     
                 if node.isCompleted then
-                    self:openNeighborNodes(node)
+                    -- self:openNeighborNodes(node)
                 else
                     Gamestate.push(node:getGamestate(), { player = self.player, type = node.type })
                 end

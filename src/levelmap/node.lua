@@ -4,7 +4,7 @@ local offset = 75
 
 local nodeRadius = 35
 local nodeLineColor = { love.math.colorFromBytes(120, 120, 130) }
-local nodeCompletedLineColor = { love.math.colorFromBytes(64, 192, 96) }
+local nodeCompletedLineColor = { love.math.colorFromBytes(32, 192, 48) }
 local nodeFightLineColor = { love.math.colorFromBytes(200, 64, 64) }
 -- local nodeCompletedLineColor = { love.math.colorFromBytes(200, 64, 64) }
 local nodeElseLineColor = { love.math.colorFromBytes(255, 255, 255) }
@@ -155,13 +155,18 @@ function Node:draw()
         love.graphics.circle('line', self.x, self.y, completeRingRadius * scale)
     end
 
-    if self.isOpen then
+    if self.isCompleted then
+        love.graphics.setLineWidth(4)
+        love.graphics.setColor(nodeCompletedLineColor)
+    elseif self.isOpen then
+        love.graphics.setLineWidth(6)
         love.graphics.setColor(nodeElseLineColor)
     else
+        love.graphics.setLineWidth(2)
         love.graphics.setColor(nodeLineColor)
     end
     
-    love.graphics.setLineWidth(4)
+    -- love.graphics.setLineWidth(4)
     love.graphics.circle('line', self.x, self.y, radius)
     
     love.graphics.setLineWidth(1)

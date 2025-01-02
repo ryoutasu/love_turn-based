@@ -105,7 +105,7 @@ vec4 effect( vec4 col, Image texture, vec2 texturePos, vec2 screenPos )
 {
 
   // get color of pixels:
-  float alpha = Texel(texture, clamp(texturePos, q1, q2)).a;
+  float alpha = -20.0 * Texel(texture, clamp(texturePos, q1, q2)).a;
   vec2 aux = vec2(stepSize.x, 0.);
   alpha += Texel(texture, clamp(texturePos + aux, q1, q2) ).a;
   alpha += Texel(texture, clamp(texturePos - aux, q1, q2) ).a;

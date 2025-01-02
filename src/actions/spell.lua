@@ -6,11 +6,19 @@ Spell:include(action)
 Spell.name = 'Spell'
 
 ---Spell class
----@param actor table
----@param spell table
+---@param actor table actor
+---@param spell table spell
 ---@param target table tile
 function Spell:init(actor, spell, target)
     action.init(self, actor)
+
+    if actor.energy < spell.cost then
+        print(actor.energy, spell.cost)
+        self.is_aborted = true
+        return false
+    end
+
+    actor:add_stat('energy', -spell.cost)
 
     self.target = target
     self.spell = spell(actor, target)

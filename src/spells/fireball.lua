@@ -16,7 +16,8 @@ local Fireball = Class{
         end
         return false
     end,
-    element = 'fire'
+    element = 'fire',
+    cost = 25,
 }
 
 local speed = 500
