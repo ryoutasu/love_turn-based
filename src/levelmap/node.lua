@@ -33,6 +33,7 @@ local sprites = {
     ['trainer'] = sprite(path .. trainerPath),
     ['event'] = sprite(path .. eventPath),
     ['rest'] = sprite(path .. restPath),
+    ['shop'] = sprite(path .. eventPath),
     ['end'] = sprite(path .. bossPath)
 }
 
@@ -45,6 +46,7 @@ local labels = {
     ['trainer'] = 'Trainer',
     ['event'] = 'Random event',
     ['rest'] = 'Rest',
+    ['shop'] = 'Shop',
     ['end'] = 'Boss fight'
 }
 
@@ -55,6 +57,7 @@ local typeGamestates = {
     ['trainer'] = BattleState,
     ['event'] = EventState,
     ['rest'] = RestState,
+    ['shop'] = ShopState,
     ['end'] = BattleState
 }
 
@@ -63,6 +66,7 @@ local typeGamestates = {
 -- fight - wild pokemon or trainer
 -- event
 -- rest
+-- shop
 -- end - boss battle
 
 local defualtType = 'wild'

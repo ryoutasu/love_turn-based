@@ -22,14 +22,28 @@ function Player:init()
     self.party = {}
     self.inventory = {}
     self.currencies = {}
+
+    self.characters = {}
+
+    self.main_character = nil
 end
 
-function Player:addCharacter(name_or_table)
+function Player:addCharacter(name_or_table, add_to_party)
     if type(name_or_table) == 'string' then
         name_or_table = setupCharacter(name_or_table)
     end
 
-    table.insert(self.party, name_or_table)
+    -- table.insert(self.characters, name_or_table)
+
+    -- if add_to_party then
+        table.insert(self.party, name_or_table)
+    -- end
+
+    return name_or_table
+end
+
+function Player:addCharacterToParty(character_table)
+    table.insert(self.party, character_table)
 end
 
 function Player:addItem(itemName, quantity)

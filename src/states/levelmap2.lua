@@ -58,9 +58,10 @@ function Levelmap:enter(from, args)
     self.currentNode = nil
 
     self.player = Player()
-    self.player:addCharacter(characterName)
-    -- self.player:addItem('catcher', 2)
+    self.player:addCharacter(characterName, true)
+    self.player:addItem('catcher', 1)
     self.player:addItem('healPotion', 2)
+    self.player:addItem('energyPotion', 2)
     self.player:addCurrency('gold', 100)
     self.characterList:setup(self.player.party)
     self.inventory:setup(self.player.inventory)
@@ -77,6 +78,7 @@ function Levelmap:enter(from, args)
     local startPoint = self.generator.startPoint
     local endPoint = self.generator.endPoint
     local rest_nodes = 0
+    local shop_nodes = 0
 
     local max_event_nodes = math.floor(#self.generator.points * 0.30)
     local event_nodes = 0
@@ -109,6 +111,9 @@ function Levelmap:enter(from, args)
             if not startNeighbor and not endNeighbor and rest_nodes < 1 then
                 type = 'rest'
                 rest_nodes = rest_nodes + 1
+            elseif not startNeighbor and not endNeighbor and shop_nodes < 1 then
+                type = 'shop'
+                shop_nodes = shop_nodes + 1
             elseif rand <= 35 and event_nodes < max_event_nodes then
                 type = 'event'
                 event_nodes = event_nodes + 1
@@ -148,6 +153,9 @@ function Levelmap:resume(from, args)
         -- else
         --     self.currentNode.isOpen = true
         -- end
+    elseif from == ShopState then
+        self.currentNode.isCompleted = true
+        -- self.currentNode.isOpen = true
     elseif from == EventState then
         self.currentNode.isCompleted = true
     else
@@ -208,28 +216,9 @@ function Levelmap:update(dt)
     end
     self.characterList:update(dt)
     self.inventory:update(dt)
-
-    -- if self.currentAction then
-    --     local complete = self.currentAction:update(dt)
-    --     if complete then self.currentAction = nil end
-    -- end
 end
 
-function Levelmap:draw()
-    for _, path in ipairs(self.pathes) do
-        path:draw()
-    end
-    for _, node in ipairs(self.nodes) do
-        node:draw()
-    end
-
-    self.characterList:draw()
-    self.inventory:draw()
-
-    -- if self.currentAction then
-    --     self.currentAction:draw()
-    -- end
-
+function Levelmap:draw_currencies()
     local padding = 4
     local w, h = self.inventory.w, self.inventory.h
     local x, y = self.inventory.x + w + 10, self.inventory.y
@@ -249,8 +238,24 @@ function Levelmap:draw()
         PrintText(text, x + padding, y + padding)
 
         x = x + textW + 10
-        -- w = textW
     end
+
+    return x, y
+end
+
+function Levelmap:draw()
+    for _, path in ipairs(self.pathes) do
+        path:draw()
+    end
+    for _, node in ipairs(self.nodes) do
+        node:draw()
+    end
+
+    self.characterList:draw()
+    self.inventory:draw()
+
+    local padding = 4
+    local x, y = self:draw_currencies()
     
     if self.currentSpell then
         local text = 'Casting: ' .. self.currentSpell.name

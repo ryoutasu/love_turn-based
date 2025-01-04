@@ -23,6 +23,12 @@ local resultFont = love.graphics.newFont(resultFontSize)
 local rewardsFontSize = 18
 local rewardsFont = love.graphics.newFont(rewardsFontSize)
 
+local stageFontSize = 40
+local stageFont = love.graphics.newFont(stageFontSize)
+
+local energyFontSize = 20
+local energyFont = love.graphics.newFont(energyFontSize)
+
 local BattleState = {}
 
 function BattleState:init()
@@ -67,11 +73,10 @@ function BattleState:init()
                 self.show_rewards_items = false
                 self.rewards_print_progress = 0
 
-                if self.type == 'wild' then
-                    table.insert(self.rewards, { currency = 'tokens', value = 10 })
-                elseif self.type == 'trainer' then
+                if self.type == 'trainer' then
                     table.insert(self.rewards, { currency = 'gold', value = 30 })
                 end
+                table.insert(self.rewards, { currency = 'expirience', value = 10 })
 
                 for index, reward in ipairs(self.rewards) do
                     self.player:addCurrency(reward.currency, reward.value)
@@ -92,6 +97,8 @@ function BattleState:init()
     self.rewards_print_progress = 0
     self.rewards_tween = nil
     self.rewards = {}
+
+    self.grabbed_actor = nil
 end
 
 function BattleState:enter(from, args)
@@ -106,7 +113,7 @@ function BattleState:enter(from, args)
     self.units = {}
     self.actions = {}
 
-    self.state = 'none'
+    self.state = 'prepare'
     self.current_spell = nil
     self.action_complete = false
 
@@ -126,8 +133,7 @@ function BattleState:enter(from, args)
         end
     end
 
-    -- self:add_unit(4, 3, 'Bat', false)
-    local x = math.random(self.map.width - 2, self.map.width)
+    local x = self.map.width -- math.random(0, 1)
     local y = math.random(1, self.map.height)
     if math.random(10) > 5 then
         self:add_unit(x, y, 'Quillpaw', false)
@@ -135,7 +141,17 @@ function BattleState:enter(from, args)
         self:add_unit(x, y, 'Dewscale', false)
     end
 
-    self:start_turn()
+    for _, tile in pairs(self.map.tiles._props) do
+        if tile.tx <= 2 then
+            if not tile.actor then
+                tile.is_open = true
+            end
+        end
+    end
+
+    self.panel.readyButton:setEnabled(true):setVisible(true)
+    -- self.panel.spellPanel:clear()
+    -- self:start_turn()
 end
 
 function BattleState:add_unit(x, y, table_or_name, is_player, do_change_character)
@@ -175,21 +191,23 @@ function BattleState:leave()
     self.map = nil
     self.pathfinder = nil
     self.queue = nil
-    
+
     self.state = 'none'
     self.current_spell = nil
     self.action_type = nil
     self.action_complete = false
-    
+
     self.result = nil
 
     self.rewards_h = 0
     self.show_rewards_items = false
-    
+
     self.resultButton.y = self.rewards_y + 5
     self.rewards_tween = nil
     self.rewards_print_progress = 0
     self.rewards = {}
+
+    self.grabbed_actor = nil
 end
 
 function BattleState:current_actor()
@@ -255,7 +273,6 @@ function BattleState:set_target_mode(current_spell, actionType)
     local actor = self:current_actor()
 
     self.map:reset_nodes()
-    -- self.pathfinder:calculate_range(actor.node, current_spell.range)
     self.pathfinder:calculate_range2(actor.node, current_spell.range)
 
     for _, t in pairs(self.map.tiles._props) do
@@ -271,27 +288,67 @@ function BattleState:cancel_target_mode()
     self.current_spell = nil
     self.map:reset_nodes()
 
+    if self.state == 'prepare' then
+        for _, tile in pairs(self.map.tiles._props) do
+            if tile.tx <= 2 then
+                if not tile.actor then
+                    tile.is_open = true
+                end
+            end
+            tile:change_color()
+        end
+
+        return
+    end
+
     local actor = self:current_actor()
+    if not actor then return end
     local node = actor.node
     BattleState:open_attack_move(actor, node)
 end
 
+function BattleState:process_nodes(gscore, parents, actor, range)
+    range = range or 99
+    local is_melee = actor.attack_range == 1
+
+    for _, node in pairs(self.map.tiles._props) do
+        local score = gscore[node]
+
+        if not node.is_blocked then
+            if score > 0 and score <= range then
+                node.is_open = true
+            end
+        end
+
+        if not node.is_open and score <= range + 1 then
+            if is_melee and node.actor and actor:enemy_to(node.actor) then
+                node.can_be_selected = true
+            end
+            node.in_attack_range = true
+        end
+
+        node.parent = parents[node]
+        node:change_color()
+    end
+end
+
 function BattleState:open_attack_move(actor, node)
+    self.map:reset_nodes()
     self.state = 'waiting'
 
-    self.pathfinder:calculate(node, actor.movement_range, false, actor.attack_range == 1)
-    self.pathfinder:calculate_range(node, actor.attack_range)
+    local gscore, parents = self.pathfinder:calculate(node)
+    self:process_nodes(gscore, parents, actor, actor.movement_range)
 
-    -- if self.map.highlighted and not self.map.highlighted.actor.is_player then
-    --     self.map:cursor_enters_tile(self.map.highlighted)
-    -- end
+    self.pathfinder:calculate_range(node, actor.attack_range)
 end
 
 function BattleState:recalculate_path(tile, range)
     local actor = self:current_actor()
     self.map:reset_nodes()
 
-    self.pathfinder:calculate(tile, range, false, actor.attack_range == 1)
+    local gscore, parents = self.pathfinder:calculate(tile)
+    self:process_nodes(gscore, parents, actor, range)
+
     self.pathfinder:calculate_range(tile, 1)
 
     for i, t in ipairs(self.map.drawing_path) do
@@ -311,7 +368,8 @@ function BattleState:start_turn()
         self.inventory:enable()
     else
         self.state = 'ai'
-        self.pathfinder:calculate(node, nil, true)
+        local gscore, parents = self.pathfinder:calculate(node)
+        self:process_nodes(gscore, parents, actor)
 
         local path_to_target
         local target
@@ -397,16 +455,24 @@ function BattleState:handle_action(dt)
         complete = currentAction:update(dt)
     else
         if self.action_complete then
-            self:start_turn()
+            -- if self.complete_delay <= 0 then
+                self:start_turn()
+            -- else
+            --     self.complete_delay = self.complete_delay - dt
+            --     return
+            -- end
         end
     end
 
     if complete then
         table.remove(self.actions, 1)
+        self.panel:end_turn()
         
         if self.state == 'result' then
             self:showResult()
         end
+
+        -- self.complete_delay = 0.5
     end
     self.action_complete = complete
 end
@@ -444,6 +510,12 @@ function BattleState:update(dt)
             self.rewards_print_progress = self.rewards_print_progress + dt * 2
         end
     end
+
+    if self.state == 'prepare' then
+        if self.grabbed_actor then
+            self.grabbed_actor.x, self.grabbed_actor.y = love.mouse.getPosition()
+        end
+    end
 end
 
 function BattleState:draw()
@@ -464,8 +536,20 @@ function BattleState:draw()
     for _, unit in ipairs(self.units) do
         if not unit.is_dead then
             unit:draw()
-            unit:draw_health(unit.node.x, unit.node.y)
+            unit:draw_health(unit.x, unit.y)
         end
+    end
+
+    local actor = self:current_actor()
+    if actor then
+        local x = self.panel.cancelButton.x
+        local y = self.panel.cancelButton.y - energyFont:getHeight() - 6
+        local text = 'Energy: ' .. tostring(actor.energy) .. '/' .. tostring(actor.max_energy)
+        love.graphics.setFont(energyFont)
+        love.graphics.setColor(0, 0, 0, 1)
+        PrintText(text, x + 1, y + 1)
+        love.graphics.setColor(1, 1, 1, 1)
+        PrintText(text, x, y)
     end
 
     local current_action = self:current_action()
@@ -503,17 +587,37 @@ function BattleState:draw()
     end
 
     if self.state == 'rewards' then
+        local x, y = self.rewards_x, self.rewards_y
+        local w, h = self.rewards_w, self.rewards_h
+
         love.graphics.setColor(0.3, 0.34, 0.5, 1)
-        love.graphics.rectangle('fill', self.rewards_x, self.rewards_y, self.rewards_w, self.rewards_h)
+        love.graphics.rectangle('fill', x, y, w, h)
 
         if self.show_rewards_items then
             love.graphics.setFont(rewardsFont)
             love.graphics.setColor(1, 1, 1, 1)
             for index, reward in ipairs(self.rewards) do
+                local i = index - 1
+                local font_h = rewardsFont:getHeight()
+                local offset = i * font_h + i * 4
                 local str = tostring(reward.value) .. ' ' .. reward.currency
-                PrintText(Badprint(str, self.rewards_print_progress), self.rewards_x + 8, self.rewards_y + 8)
+                PrintText(Badprint(str, self.rewards_print_progress), x + 8, y + 8 + offset)
             end
         end
+        
+        -- x = x + w + 10
+        -- love.graphics.setColor(0.3, 0.34, 0.5, 1)
+        -- love.graphics.rectangle('fill', x, y, w, h)
+    end
+
+    if self.state == 'prepare' then
+        local text = 'Prepare stage'
+        local w = stageFont:getWidth(text)
+        love.graphics.setFont(stageFont)
+        love.graphics.setColor(0, 0, 0, 1)
+        PrintText(text, love.graphics.getWidth()/2 - w/2 + 3, 70 + 3)
+        love.graphics.setColor(1, 1, 1, 1)
+        PrintText(text, love.graphics.getWidth()/2 - w/2, 70)
     end
 end
 
@@ -543,6 +647,28 @@ function BattleState:mousepressed(x, y, button)
                 end
             end
         end
+
+        if self.state == 'prepare' then
+            if self.grabbed_actor then
+                if tile and tile.is_open then
+                    self.grabbed_actor.node.is_open = true
+                    self.grabbed_actor.node:change_color()
+
+                    self.grabbed_actor:set_node(tile)
+                    self.grabbed_actor.x = tile.x
+                    self.grabbed_actor.y = tile.y
+                    self.grabbed_actor.show_name = true
+                    self.grabbed_actor.panel.highlighted = true
+
+                    self.grabbed_actor = nil
+                    tile.is_open = false
+
+                    self.map.highlighted = nil
+                end
+            elseif tile and tile.actor and tile.actor.is_player then
+                self.grabbed_actor = tile.actor
+            end
+        end
     end
 
     if button == 2 then
@@ -564,6 +690,14 @@ function BattleState:mousepressed(x, y, button)
         end
         if self.state == 'drawing_path' then
             self.map:stop_drawing_path()
+        end
+
+        if self.state == 'prepare' then
+            if self.grabbed_actor then
+                self.grabbed_actor.x = self.grabbed_actor.node.x
+                self.grabbed_actor.y = self.grabbed_actor.node.y
+                self.grabbed_actor = nil
+            end
         end
     end
     self.inventory:mousepressed(x, y)

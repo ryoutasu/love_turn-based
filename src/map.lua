@@ -155,8 +155,6 @@ function Map:check_highlight_tile(x, y)
     end
 
     if leaving_tile then
-        -- local leaving_tile = self.leaving_tile
-        -- print('Leaving tile '..leaving_tile.tx..'/'..leaving_tile.ty)
         if self.showing_range then
             BattleState:cancel_target_mode()
             leaving_tile:hide_path()
@@ -172,8 +170,6 @@ function Map:check_highlight_tile(x, y)
     end
     
     if entering_tile then
-        -- local entering_tile = self.entering_tile
-        -- print('Entering tile '..entering_tile.tx..'/'..entering_tile.ty)
         self:cursor_enters_tile(entering_tile)
         
         if entering_tile.actor then
@@ -224,7 +220,7 @@ function Map:cursor_enters_tile(tile)
         end
     end
     
-    if state == 'waiting' and tile.actor and tile.actor ~= actor then
+    if (state == 'waiting' or state == 'prepare') and tile.actor and tile.actor ~= actor then
         self:show_actor_movement_range(tile)
     end
 
@@ -242,39 +238,30 @@ end
 
 function Map:show_actor_movement_range(tile)
     local actor = tile.actor
-    local open_nodes = {}
-    local attack_nodes = {}
-    
-    local can_be_selected = tile.can_be_selected
-    local range = tile.range
-    self:reset_nodes()
+    local range = actor.movement_range
 
-    BattleState.pathfinder:calculate(tile, actor.movement_range, true, false)
+    local gscore, parents = BattleState.pathfinder:calculate(tile)
 
     for _, node in pairs(self.tiles._props) do
-        if node.is_open then
-            table.insert(open_nodes, node)
-        end
-        if node.in_attack_range then
-            table.insert(attack_nodes, node)
-        end
-    end
+        local parent = parents[node]
+        local score = gscore[node]
 
-    BattleState:cancel_target_mode()
+        if not node.is_blocked then
+            if score > 0 and score <= range then
+                node.show_as_range = true
+            end
+        end
 
-    for _, node in pairs(open_nodes) do
-        node.show_as_range = true
+        if not node.show_as_range and score <= range + 1 and parent and gscore[parent] <= range then
+            node.show_as_attack_range = true
+        end
+
         node:change_color()
     end
-    for _, node in pairs(attack_nodes) do
-        node.show_as_attack_range = true
-    end
-    
+
     self.showing_range = true
     self.highlighted = tile
 
-    tile.can_be_selected = can_be_selected
-    tile.range = range
     tile:change_color()
 end
 

@@ -17,7 +17,7 @@ local Fireball = Class{
         return false
     end,
     element = 'fire',
-    cost = 25,
+    cost = 0,
 }
 
 local speed = 500
@@ -65,25 +65,32 @@ function Fireball:update(dt)
 
     if not complete then return false end
 
-	self.particle.system:pause()
-	self.particle2.system:pause()
+    -- if not self.delay then
+    --     self.delay = 1
 
-    self.particle.toRemove = true
-    self.particle2.toRemove = true
-
-    local particle = Particles:add(love.graphics.newParticleSystem(image, 3500))
-	particle.system:setPosition(self.x, self.y)
-    particle.system:setEmissionArea('borderellipse', 7, 7)
-	particle.system:setParticleLifetime(0.4, 0.6)
-	particle.system:setSizes(2)
-	particle.system:setColors(1,1,1,1, 1,1,0,1, 1,0,0,1, 1,0,0,0)
-    particle.system:setRadialAcceleration(150, 200)
-    particle.system:emit(800)
+        self.particle.system:pause()
+        self.particle2.system:pause()
     
-    particle.toRemove = true
+        self.particle.toRemove = true
+        self.particle2.toRemove = true
+    
+        local particle = Particles:add(love.graphics.newParticleSystem(image, 3500))
+        particle.system:setPosition(self.x, self.y)
+        particle.system:setEmissionArea('borderellipse', 7, 7)
+        particle.system:setParticleLifetime(0.4, 0.6)
+        particle.system:setSizes(2)
+        particle.system:setColors(1,1,1,1, 1,1,0,1, 1,0,0,1, 1,0,0,0)
+        particle.system:setRadialAcceleration(150, 200)
+        particle.system:emit(800)
+        
+        particle.toRemove = true
+    
+        local damage = self.caster.damage * multiplier
+        self.target:take_damage(self.caster, 200)
+    -- end
 
-    local damage = self.caster.damage * multiplier
-    self.target:take_damage(self.caster, 200)
+    -- self.delay = self.delay - dt
+    -- if self.delay > 0 then return false end
     
     return true
 end

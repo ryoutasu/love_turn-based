@@ -68,13 +68,11 @@ function Pathfinder:pop_best_node(set, score)
 	return node
 end
 
-function Pathfinder:calculate(start, range, check_blocked, is_melee)
-    range = range or nil
-    local actor = BattleState:current_actor()
-
+function Pathfinder:calculate(start)
     local reachable = { [start] = true }
     local explored = {}
 
+    local parents = {}
     local gscore = { [start] = 0 }
 
     while next(reachable) do
@@ -83,12 +81,6 @@ function Pathfinder:calculate(start, range, check_blocked, is_melee)
         explored[current] = true
 
         if not current.is_blocked or current == start then
-            if current ~= start and (range == nil or gscore[current] <= range) then
-                current:open_to_move()
-            elseif (range == nil or gscore[current] <= range + 1)
-            and current.parent and current.parent.is_open then
-                current.in_attack_range = true
-            end
 
             local neighbors = self:get_neighbors(current)
             for i = 1, 6, 1 do
@@ -101,20 +93,16 @@ function Pathfinder:calculate(start, range, check_blocked, is_melee)
                         and ]] (not reachable[neighbor] or tentative < gscore[neighbor]) then
                             reachable[neighbor] = true
                             gscore[neighbor] = tentative
-                            neighbor.parent = current
+                            -- neighbor.parent = current
+                            parents[neighbor] = current
                         end
                     end
                 end
             end
-        elseif (range == nil or gscore[current] <= range + 1)
-        and current.parent and current.parent.is_open then
-            if is_melee and current.actor and actor:enemy_to(current.actor) then
-                current.can_be_selected = true
-                current:change_color()
-            end
-            current.in_attack_range = true
         end
     end
+
+    return gscore, parents
 end
 
 local abs = math.abs
@@ -140,14 +128,6 @@ function Pathfinder:calculate_range(start, max_range, draw_borders)
         end
 
         if state == 'drawing_path' then
-            -- if range <= max_range and not node.is_blocked then
-            --     node.is_open = true
-            --     node:change_color()
-            -- else
-            --     node.is_open = false
-            --     node:change_color()
-            -- end
-
             if range <= max_range+1 and node.actor and actor:enemy_to(node.actor) then
                 node.can_be_selected = true
                 node:change_color()

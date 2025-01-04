@@ -30,6 +30,17 @@ function CommandPanel:init(urutora, x, y)
     end)
     :hide()
 
+    local readyButton = Urutora.button({
+        x = x, y = y,
+        w = w, h = h,
+        text = 'Ready'
+    })
+    readyButton:action(function(e)
+        BattleState:start_turn()
+        self.readyButton:setEnabled(false):setVisible(false)
+    end)
+    :hide()
+
     y = y + h + 7.5
 
     local spellPanel = Urutora.panel({
@@ -41,17 +52,18 @@ function CommandPanel:init(urutora, x, y)
 
     skipButton:disable()
     cancelButton:disable()
+    readyButton:disable()
     spellPanel:disable()
 
     self.u:add(skipButton)
     self.u:add(cancelButton)
+    self.u:add(readyButton)
     self.u:add(spellPanel)
     
     self.skipButton = skipButton
     self.cancelButton = cancelButton
+    self.readyButton = readyButton
     self.spellPanel = spellPanel
-
-    self.awaiting = {}
 end
 
 function CommandPanel:start_turn(actor)
@@ -74,7 +86,7 @@ function CommandPanel:start_turn(actor)
 end
 
 function CommandPanel:end_turn()
-    
+    self.spellPanel:clear()
 end
 
 function CommandPanel:show_cancel_button(show)
@@ -84,12 +96,14 @@ end
 
 function CommandPanel:disable()
     self.cancelButton:hide():disable()
+    self.readyButton:hide():disable()
     self.skipButton:disable()
     self.spellPanel:disable()
 end
 
 function CommandPanel:clear()
     if self.cancelButton then self.u:remove(self.cancelButton) end
+    if self.readyButton then self.u:remove(self.readyButton) end
     if self.skipButton then self.u:remove(self.skipButton) end
     if self.spellPanel then self.u:remove(self.spellPanel) end
 end

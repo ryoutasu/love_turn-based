@@ -22,10 +22,12 @@ require 'colors'
 
 MainMenuState = require 'src.states.mainMenu'
 CharacterSelect = require 'src.states.characterSelect'
--- Level states (BattleState, EventState, etc.) before Levelmap state !!!
+-- node states
 BattleState = require 'src.states.battlestate'
 RestState = require 'src.states.reststate'
+ShopState = require 'src.states.shopstate'
 EventState = require 'src.states.eventstate'
+-- Level states (BattleState, EventState, etc.) before Levelmap state !!!
 Levelmap = require 'src.states.levelmap2'
 
 function love.load()
@@ -37,6 +39,7 @@ function love.load()
 
     Gamestate.registerEvents()
     Gamestate.switch(MainMenuState)
+    -- Gamestate.switch(ShopState, {})
 end
 
 function love.update(dt)

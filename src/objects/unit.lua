@@ -5,7 +5,7 @@ local moonshine = require 'lib.moonshine'
 
 -- local statistics = require 'src.unit_statistics'
 
-local fontSize = 11
+local fontSize = 12
 local healthFont = love.graphics.newFont(fontSize)
 
 local text_effect = moonshine(moonshine.effects.boxblur)
@@ -99,6 +99,9 @@ function Unit:set_stat(name, value)
     if name == 'health' then
         value = math.min(value, self.max_health)
     end
+    if name == 'energy' then
+        value = math.min(value, self.max_energy)
+    end
 
     self[name] = value
     
@@ -189,15 +192,7 @@ function Unit:convertToParty()
 end
 
 function Unit:update(dt)
-    -- self.action_new = false
-    -- self.action_completed = false
-    -- if self.current_action then
-    --     local complete = self.current_action:update(dt)
-    --     if complete then
-    --         self.current_action = nil
-    --         self.action_completed = true
-    --     end
-    -- end
+    
 end
 
 -- mathemagic
@@ -258,39 +253,38 @@ local sides = {
 function Unit:draw_health(x, y)
     if self.is_dead or self.is_moving then return end
 
-    self.shader:outline(1, 1, 1)
     love.graphics.setFont(healthFont)
 
-    local w = health_w
-    local h = health_h
-    local rx1 = x + health_x
-    local ry1 = y + health_y
-    local rx2 = x + energy_x
-    local ry2 = y + energy_y
+    -- local w = health_w
+    -- local h = health_h
+    -- local rx1 = x + health_x
+    -- local ry1 = y + health_y
+    -- local rx2 = x + energy_x
+    -- local ry2 = y + energy_y
 
-    text_effect(function ()
-        love.graphics.setColor(1, 0.35, 0.35, 1)
-        love.graphics.polygon('fill',
-            p1.x + x, p1.y + y,
-            p1.x + x, p1.y + y - h,
-            p2.x + x, p2.y + y - h,
-            p2.x + x, p2.y + y
-        )
+    -- text_effect(function ()
+    --     love.graphics.setColor(1, 0.35, 0.35, 1)
+    --     love.graphics.polygon('fill',
+    --         p1.x + x, p1.y + y,
+    --         p1.x + x, p1.y + y - h,
+    --         p2.x + x, p2.y + y - h,
+    --         p2.x + x, p2.y + y
+    --     )
     
-        love.graphics.setColor(0.25, 0.35, 1, 1)
-        love.graphics.polygon('fill',
-            p1.x + x, p1.y + y,
-            p1.x + x, p1.y + y - h,
-            p3.x + x, p3.y + y - h,
-            p3.x + x, p3.y + y
-        )
-    end)
+    --     love.graphics.setColor(0.25, 0.35, 1, 1)
+    --     love.graphics.polygon('fill',
+    --         p1.x + x, p1.y + y,
+    --         p1.x + x, p1.y + y - h,
+    --         p3.x + x, p3.y + y - h,
+    --         p3.x + x, p3.y + y
+    --     )
+    -- end)
 
-    local healthString = self.health .. '/' .. self.max_health
-    local energy_string = self.energy .. '/' .. self.max_energy
+    -- local healthString = self.health .. '/' .. self.max_health
+    -- local energy_string = self.energy .. '/' .. self.max_energy
     
-    self.health_text:setf(healthString, w, 'center')
-    self.energy_text:setf(energy_string, w, 'center')
+    -- self.health_text:setf(healthString, w, 'center')
+    -- self.energy_text:setf(energy_string, w, 'center')
 
     -- love.graphics.setColor(1, 1, 1, 1)
     -- for index, value in ipairs(sides) do
@@ -298,9 +292,26 @@ function Unit:draw_health(x, y)
     --     love.graphics.draw(self.energy_text, math.floor(rx2) + value[1], math.floor(ry2) + value[2], rotation2, 1, 1, 0, 0, kx, 0)
     -- end
 
+    -- love.graphics.setColor(0, 0, 0, 1)
+    -- love.graphics.draw(self.health_text, math.floor(rx1), math.floor(ry1), rotation, 1, 1, 0, 0, -kx, 0)
+    -- love.graphics.draw(self.energy_text, math.floor(rx2), math.floor(ry2), rotation2, 1, 1, 0, 0, kx, 0)
+
+    local healthString = self.health .. '/' .. self.max_health
+    local w = healthFont:getWidth(healthString)
+    local h = healthFont:getHeight() - 1
+    local rx, ry = math.floor(x - w/2), math.floor(y) + 10
+
+    -- local padding = 1
+    -- love.graphics.setColor(0.15, 0.45, 0.25, 0.5)
+    -- love.graphics.rectangle('fill', rx - padding, ry - padding, w + padding + padding, h + padding + padding)
+    -- love.graphics.setColor(0, 0, 0, 0.5)
+    -- love.graphics.rectangle('line', rx - padding, ry - padding, w + padding + padding, h + padding + padding)
+
+    self.health_text:setf(healthString, w, 'center')
     love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.draw(self.health_text, math.floor(rx1), math.floor(ry1), rotation, 1, 1, 0, 0, -kx, 0)
-    love.graphics.draw(self.energy_text, math.floor(rx2), math.floor(ry2), rotation2, 1, 1, 0, 0, kx, 0)
+    love.graphics.draw(self.health_text, rx + 1, ry + 1)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.draw(self.health_text, rx, ry)
 end
 
 function Unit:draw_outline(r, g, b, size)

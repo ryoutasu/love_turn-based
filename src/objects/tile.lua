@@ -125,11 +125,12 @@ function Tile:show_path(first)
 end
 
 function Tile:hide_path()
+    -- print('hide path')
     self.as_path = false
     self:set_animation()
     if self.parent then
-        -- if self.parent == self then print('ABORT!'); return end
-        -- if self.parent.parent == self then print('ABORT! 2'); return end
+        -- if self.parent == self then print('ABORT!'); print(self.tx, self.ty, self.parent.tx, self.parent.ty); return end
+        -- if self.parent.parent == self then print('ABORT! 2'); print(self.tx, self.ty, self.parent.tx, self.parent.ty); return end
         self.parent:hide_path()
     end
 end
@@ -220,6 +221,14 @@ function Tile:draw()
         love.graphics.setColor(1, 1, 1, 1)
         s:draw(_, x, y, self.path_sprite_rotation, 1, 1, s.w/2, s.h/2)
     end
+
+    -- if self.parent then
+    --     local s = self.path_sprite
+    --     local rotation = Vector(self.parent.x - self.x, self.parent.y - self.y):angleTo()
+        
+    --     love.graphics.setColor(1, 1, 1, 1)
+    --     s:draw(_, x, y, rotation, 1, 1, s.w/2, s.h/2)
+    -- end
 
     -- if self.range then
     --     love.graphics.setColor(0, 0, 0, 1)
