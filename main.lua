@@ -39,7 +39,6 @@ function love.load()
 
     Gamestate.registerEvents()
     Gamestate.switch(MainMenuState)
-    -- Gamestate.switch(ShopState, {})
 end
 
 function love.update(dt)

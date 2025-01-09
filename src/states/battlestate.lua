@@ -101,6 +101,19 @@ function BattleState:init()
     self.grabbed_actor = nil
 end
 
+local function find_node(map, offset)
+    for i = offset, offset + 1 do
+        for j = 1, map.height do
+            local node = map:get_node(i, j)
+            if node and not node.is_blocked then
+                return node
+            end
+        end
+    end
+
+    return false
+end
+
 function BattleState:enter(from, args)
     self.result = nil
     self.paused = false
@@ -108,7 +121,7 @@ function BattleState:enter(from, args)
     self.map = map(8, 6)
     self.pathfinder = pathfinder(self.map)
     self.queue = queue(230, love.graphics.getHeight() - 210)
-    self.type = args.type
+    self.type = args.node.type
 
     self.units = {}
     self.actions = {}
@@ -120,25 +133,35 @@ function BattleState:enter(from, args)
     self.player = args.player
     self.inventory = inventory(100, 10, self.player.inventory)
 
-    local ranged_i = 1
-    local melee_i = 1
     for _, character in ipairs(self.player.party) do
-        local isMelee = character.attack_range == 1
-        if isMelee then
-            self:add_unit(2, melee_i, character, true, true)
-            melee_i = melee_i + 1
-        else
-            self:add_unit(1, ranged_i, character, true, true)
-            ranged_i = ranged_i + 1
+        local node
+        if character.prepare_x and character.prepare_y then
+            node = self.map:get_node(character.prepare_x, character.prepare_y)
+        end
+        if not node or node.is_blocked then
+            node = find_node(self.map, 0)
+        end
+        self:add_unit(character, true, true, node)
+    end
+
+    local enemy_nodes = {}
+    for i = 0, 1 do
+        for j = 1, self.map.height do
+            local node = self.map:get_node(self.map.width - i, j)
+            if not node.is_blocked then
+                table.insert(enemy_nodes, node)
+            end
         end
     end
 
-    local x = self.map.width -- math.random(0, 1)
-    local y = math.random(1, self.map.height)
-    if math.random(10) > 5 then
-        self:add_unit(x, y, 'Quillpaw', false)
-    else
-        self:add_unit(x, y, 'Dewscale', false)
+    for i = 1, args.node.enemies_count do
+        local node = table.remove(enemy_nodes, math.random(1, #enemy_nodes))
+        
+        if math.random(10) > 5 then
+            self:add_unit('Quillpaw', false, false, node)
+        else
+            self:add_unit('Dewscale', false, false, node)
+        end
     end
 
     for _, tile in pairs(self.map.tiles._props) do
@@ -154,16 +177,15 @@ function BattleState:enter(from, args)
     -- self:start_turn()
 end
 
-function BattleState:add_unit(x, y, table_or_name, is_player, do_change_character)
-    local character_table = table_or_name
+function BattleState:add_unit(table_or_name, is_player, do_change_character, node)
+    local character = table_or_name
     if type(table_or_name) == "string" then
-        character_table = characterList[table_or_name]
+        character = characterList[table_or_name]
     end
 
-    local node = self.map:get_node(x, y)
     if not node or node.is_blocked then return false end
-    
-    local u = Unit(node, is_player):setup(character_table, do_change_character)
+
+    local u = Unit(node, is_player):setup(character, do_change_character)
 
     table.insert(self.units, u)
     self.queue:add_actor(u)
@@ -232,9 +254,9 @@ end
 function BattleState:check_result()
     local is_win = true
     local is_lose = true
-    for _, checking_unit in ipairs(self.units) do
-        if not checking_unit.is_dead then
-            if checking_unit.is_player then
+    for _, unit in ipairs(self.units) do
+        if not unit.is_dead then
+            if unit.is_player then
                 is_lose = false
             else
                 is_win = false
@@ -244,12 +266,12 @@ function BattleState:check_result()
 
     if is_win then
         self.result = 'win'
+        self.state = 'result'
     end
     if is_lose then
         self.result = 'lose'
+        self.state = 'result'
     end
-
-    self.state = 'result'
 end
 
 function BattleState:showResult()
@@ -361,6 +383,13 @@ function BattleState:start_turn()
     self.queue:start_turn()
     
     local actor = self:current_actor()
+
+    for _, spell in ipairs(actor.spells) do
+        if spell.current_cooldown and spell.current_cooldown > 0 then
+            spell.current_cooldown = spell.current_cooldown - 1
+        end
+    end
+
     local node = actor.node
     if actor.is_player == true then
         BattleState:open_attack_move(actor, node)
@@ -485,7 +514,7 @@ function BattleState:update(dt)
     end
 
     self.map:update(dt)
-    
+
     local actor = self.map.highlighted and self.map.highlighted.actor or nil
     table.sort(self.units, function (a, b)
         if a == actor then return false end
@@ -659,6 +688,9 @@ function BattleState:mousepressed(x, y, button)
                     self.grabbed_actor.y = tile.y
                     self.grabbed_actor.show_name = true
                     self.grabbed_actor.panel.highlighted = true
+
+                    self.grabbed_actor.character.prepare_x = tile.tx
+                    self.grabbed_actor.character.prepare_y = tile.ty
 
                     self.grabbed_actor = nil
                     tile.is_open = false

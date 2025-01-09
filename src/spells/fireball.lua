@@ -6,22 +6,10 @@ local image = love.graphics.newImage(imageData)
 
 local multiplier = 1.5
 
-local Fireball = Class{
-    name = 'Fireball',
-    type = 'unit',
-    range = 20,
-    filter = function(target)
-        if target.actor and not target.actor.is_player then
-            return true
-        end
-        return false
-    end,
-    element = 'fire',
-    cost = 0,
-}
+local Cast = Class{}
 
 local speed = 500
-function Fireball:init(caster, target)
+function Cast:init(caster, target)
     target = target.actor
 
     self.caster = caster
@@ -57,7 +45,7 @@ function Fireball:init(caster, target)
     self.particle2 = particle2
 end
 
-function Fireball:update(dt)
+function Cast:update(dt)
     local complete = self.tween:update(dt)
     
 	self.particle.system:moveTo(self.x, self.y)
@@ -86,7 +74,7 @@ function Fireball:update(dt)
         particle.toRemove = true
     
         local damage = self.caster.damage * multiplier
-        self.target:take_damage(self.caster, 200)
+        self.target:take_damage(self.caster, 50)
     -- end
 
     -- self.delay = self.delay - dt
@@ -95,8 +83,26 @@ function Fireball:update(dt)
     return true
 end
 
-function Fireball:draw()
+function Cast:draw()
 
+end
+
+local Fireball = Class{}
+
+function Fireball:init()
+    self.name = 'Fireball'
+    self.type = 'unit'
+    self.range = 20
+    self.filter = function(target)
+        if target.actor and not target.actor.is_player then
+            return true
+        end
+        return false
+    end
+    self.element = 'fire'
+    self.cost = 4
+    self.cooldown = 2
+    self.cast = Cast
 end
 
 return Fireball

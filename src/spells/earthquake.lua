@@ -1,22 +1,9 @@
 local animation = require 'src.animation'
 
-local Earthquake = Class{
-    name = 'Earthquake',
-    type = 'AOE',
-    range = 3,
-    radius = 1,
-    filter = function(target)
-        -- if target.actor and not target.actor.is_player then
-        --     return true
-        -- end
-        -- return false
-        return true
-    end,
-    element = 'stone',
-    cost = 6,
-}
+local Cast = Class{}
 
-function Earthquake:init(caster, target)
+function Cast:init(caster, target, spell)
+    self:include(spell)
     target = target.actor
 
     self.caster = caster
@@ -33,13 +20,32 @@ function Earthquake:init(caster, target)
     end
 end
 
-function Earthquake:update(dt)
+function Cast:update(dt)
 
     return true
 end
 
-function Earthquake:draw()
+function Cast:draw()
 
+end
+
+local Earthquake = Class{}
+
+function Earthquake:init()
+    self.name = 'Earthquake'
+    self.type = 'AOE'
+    self.range = 3
+    self.radius = 1
+    self.filter = function(target)
+        -- if target.actor and not target.actor.is_player then
+        --     return true
+        -- end
+        -- return false
+        return true
+    end
+    self.element = 'stone'
+    self.cost = 6
+    self.cast = Cast
 end
 
 return Earthquake

@@ -6,22 +6,10 @@ local image = love.graphics.newImage(imageData)
 
 local multiplier = 0.8
 
-local Spit = Class{
-    name = 'Spit',
-    type = 'unit',
-    range = 5,
-    filter = function(target)
-        if target.actor and not target.actor.is_player then
-            return true
-        end
-        return false
-    end,
-    element = 'normal',
-    cost = 2,
-}
+local Cast = Class{}
 
 local speed = 350
-function Spit:init(caster, target)
+function Cast:init(caster, target)
     target = target.actor
 
     self.caster = caster
@@ -46,7 +34,7 @@ function Spit:init(caster, target)
     self.particle = particle
 end
 
-function Spit:update(dt)
+function Cast:update(dt)
     local complete = self.tween:update(dt)
     
 	self.particle.system:moveTo(self.x, self.y)
@@ -74,8 +62,25 @@ function Spit:update(dt)
     return true
 end
 
-function Spit:draw()
+function Cast:draw()
 
+end
+
+local Spit = Class{}
+
+function Spit:init()
+    self.name = 'Spit'
+    self.type = 'unit'
+    self.range = 5
+    self.filter = function(target)
+        if target.actor and not target.actor.is_player then
+            return true
+        end
+        return false
+    end
+    self.element = 'normal'
+    self.cost = 2
+    self.cast = Cast
 end
 
 return Spit

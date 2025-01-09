@@ -55,7 +55,8 @@ end
 
 function RestState:rest()
     for i, character in ipairs(self.player.party) do
-        character.health = math.min(character.health + character.max_health * 0.35, character.max_health)
+        character.health = math.min(character.health + character.max_health * 0.5, character.max_health)
+        character.energy = math.min(character.energy + character.max_energy * 0.5, character.max_energy)
     end
 
     self.restButton:disable()

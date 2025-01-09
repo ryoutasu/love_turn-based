@@ -28,7 +28,6 @@ local bossPath = 'boss.png'
 
 local sprites = {
     ['start'] = sprite(path .. trainerPath),
-    -- ['fight'] = sprite(path .. fightPath),
     ['wild'] = sprite(path .. wildPath),
     ['trainer'] = sprite(path .. trainerPath),
     ['event'] = sprite(path .. eventPath),
@@ -41,7 +40,6 @@ local fontSize = 14
 local labelFont = love.graphics.newFont(fontSize)
 local labels = {
     ['start'] = 'Start',
-    -- ['fight'] = 'Fight',
     ['wild'] = 'Bushes',
     ['trainer'] = 'Trainer',
     ['event'] = 'Random event',
@@ -50,9 +48,8 @@ local labels = {
     ['end'] = 'Boss fight'
 }
 
-local typeGamestates = {
+local node_gamestates = {
     ['start'] = BattleState,
-    -- ['fight'] = BattleState,
     ['wild'] = BattleState,
     ['trainer'] = BattleState,
     ['event'] = EventState,
@@ -62,8 +59,9 @@ local typeGamestates = {
 }
 
 -- node types:
--- start - fight
--- fight - wild pokemon or trainer
+-- start - wild, but easier
+-- wild
+-- trainer
 -- event
 -- rest
 -- shop
@@ -91,10 +89,14 @@ function Node:init(x, y, isOpen, type)
     self.spriteY = y - nodeRadius / 2
     self.spriteScaleX = nodeRadius / self.sprite.w
     self.spriteScaleY = nodeRadius / self.sprite.h
+
+    if type == 'wild' or type == 'trainer' then
+        self.enemies_count = math.random(2, 3)
+    end
 end
 
 function Node:getGamestate()
-    return typeGamestates[self.type]
+    return node_gamestates[self.type]
 end
 
 function Node:update(dt)

@@ -2,21 +2,9 @@ local animation = require 'src.animation'
 
 local multiplier = 2
 
-local Lash = Class{
-    name = 'Lash',
-    type = 'unit',
-    range = 1,
-    filter = function(target)
-        if target.actor and not target.actor.is_player then
-            return true
-        end
-        return false
-    end,
-    element = 'nature',
-    cost = 2,
-}
+local Cast = Class{}
 
-function Lash:init(caster, target)
+function Cast:init(caster, target)
     target = target.actor
 
     self.caster = caster
@@ -40,7 +28,7 @@ function Lash:init(caster, target)
     self.effect = effect
 end
 
-function Lash:update(dt)
+function Cast:update(dt)
     self.effect:update(dt)
     local _, _, w, h = self.effect:get_frame():getViewport()
     self.ox = w / 2
@@ -55,9 +43,26 @@ function Lash:update(dt)
     return true
 end
 
-function Lash:draw()
+function Cast:draw()
     love.graphics.setColor(0, 1, 0, 1)
     self.effect:draw(self.x, self.y, self.r, 1, 2, self.ox, self.oy)
+end
+
+local Lash = Class{}
+
+function Lash:init()
+    self.name = 'Lash'
+    self.type = 'unit'
+    self.range = 1
+    self.filter = function(target)
+        if target.actor and not target.actor.is_player then
+            return true
+        end
+        return false
+    end
+    self.element = 'nature'
+    self.cost = 2
+    self.cast = Cast
 end
 
 return Lash

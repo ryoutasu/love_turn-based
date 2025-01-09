@@ -80,6 +80,11 @@ function CommandPanel:start_turn(actor)
             BattleState:set_target_mode(spell)
         end)
 
+        if spell.current_cooldown and spell.current_cooldown > 0 then
+            btn.text = btn.text .. ' : ' .. tonumber(spell.current_cooldown)
+            btn:disable()
+        end
+
         self.spellPanel:addAt(i, 1, btn)
     end
     self.spellPanel:setScrollY(0)

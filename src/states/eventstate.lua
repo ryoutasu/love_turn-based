@@ -28,7 +28,7 @@ function EventState:init()
 end
 
 function EventState:enter(from, args)
-    self.type = args.type
+    self.type = args.node.type
     self.player = args.player
 
     -- for i, button in ipairs(self.buttons) do

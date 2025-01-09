@@ -2,21 +2,9 @@ local animation = require 'src.animation'
 
 local multiplier = 1.2
 
-local Claws = Class{
-    name = 'Claws',
-    type = 'unit',
-    range = 1,
-    filter = function(target)
-        if target.actor and not target.actor.is_player then
-            return true
-        end
-        return false
-    end,
-    element = 'normal',
-    cost = 1,
-}
+local Cast = Class{}
 
-function Claws:init(caster, target)
+function Cast:init(caster, target)
     target = target.actor
 
     self.caster = caster
@@ -40,7 +28,7 @@ function Claws:init(caster, target)
     self.effect = effect
 end
 
-function Claws:update(dt)
+function Cast:update(dt)
     self.effect:update(dt)
     local _, _, w, h = self.effect:get_frame():getViewport()
     self.ox = w / 2
@@ -49,15 +37,33 @@ function Claws:update(dt)
         return false
     end
 
-    local damage = self.caster.damage * multiplier
-    self.target:take_damage(self.caster, damage)
+    -- local damage = self.caster.damage * multiplier
+    self.target:take_damage(self.caster, self.damage)
 
     return true
 end
 
-function Claws:draw()
+function Cast:draw()
     love.graphics.setColor(1, 1, 1, 1)
     self.effect:draw(self.x, self.y, self.r, 1, 2, self.ox, self.oy)
+end
+
+local Claws = Class{}
+
+function Claws:init()
+    self.name = 'Claws'
+    self.type = 'unit'
+    self.range = 1
+    self.filter = function(target)
+        if target.actor and not target.actor.is_player then
+            return true
+        end
+        return false
+    end
+    self.element = 'normal'
+    self.cost = 2
+    self.damage = 10
+    self.cast = Cast
 end
 
 return Claws

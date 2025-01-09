@@ -61,8 +61,11 @@ function Unit:setup(character, do_change_character)
     self.sprite_sx = character.sprite_sx or 1
     self.sprite_sy = character.sprite_sy or 1
 
-    for _, spellname in ipairs(character.spells) do
-        self:add_spell(spellList[spellname])
+    for _, spell in ipairs(character.spells) do
+        if type(spell) == "string" then
+            spell = spellList[spell]()
+        end
+        self:add_spell(spell)
     end
 
     if do_change_character then
@@ -164,8 +167,8 @@ function Unit:take_damage(source, damage, type)
         self.node.actor = nil
         self.node.is_blocked = false
         
-        if self.character_reference then
-            self.character_reference.is_dead = true
+        if self.character then
+            self.character.is_dead = true
         end
 
         BattleState:unit_death(self)
@@ -188,6 +191,8 @@ function Unit:convertToParty()
         energy = self.energy,
         max_energy = self.max_energy,
         spells = self.spells,
+        -- prepare_x = self.prepare_x,
+        -- prepare_y = self.prepare_y,
     }
 end
 

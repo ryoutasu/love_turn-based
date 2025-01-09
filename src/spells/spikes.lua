@@ -2,21 +2,9 @@ local animation = require 'src.animation'
 
 local multiplier = 1.5
 
-local Spikes = Class{
-    name = 'Spikes',
-    type = 'unit',
-    range = 5,
-    filter = function(target)
-        if target.actor and not target.actor.is_player then
-            return true
-        end
-        return false
-    end,
-    element = 'stone',
-    cost = 3,
-}
+local Cast = Class{}
 
-function Spikes:init(caster, target)
+function Cast:init(caster, target)
     target = target.actor
 
     self.caster = caster
@@ -37,7 +25,7 @@ function Spikes:init(caster, target)
     self.effect = effect
 end
 
-function Spikes:update(dt)
+function Cast:update(dt)
     self.effect:update(dt)
     local _, _, w, h = self.effect:get_frame():getViewport()
     self.ox = w / 2
@@ -52,9 +40,26 @@ function Spikes:update(dt)
     return true
 end
 
-function Spikes:draw()
+function Cast:draw()
     love.graphics.setColor(1, 1, 1, 1)
     self.effect:draw(self.x, self.y, 0, 2, 2, self.ox, self.oy)
+end
+
+local Spikes = Class{}
+
+function Spikes:init()
+    self.name = 'Spikes'
+    self.type = 'unit'
+    self.range = 5
+    self.filter = function(target)
+        if target.actor and not target.actor.is_player then
+            return true
+        end
+        return false
+    end
+    self.element = 'stone'
+    self.cost = 3
+    self.cast = Cast
 end
 
 return Spikes

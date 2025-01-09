@@ -2,21 +2,9 @@ local animation = require 'src.animation'
 
 local multiplier = 2
 
-local StoneClaws = Class{
-    name = 'Stone Claws',
-    type = 'unit',
-    range = 1,
-    filter = function(target)
-        if target.actor and not target.actor.is_player then
-            return true
-        end
-        return false
-    end,
-    element = 'stone',
-    cost = 2,
-}
+local Cast = Class{}
 
-function StoneClaws:init(caster, target)
+function Cast:init(caster, target)
     target = target.actor
 
     self.caster = caster
@@ -40,7 +28,7 @@ function StoneClaws:init(caster, target)
     self.effect = effect
 end
 
-function StoneClaws:update(dt)
+function Cast:update(dt)
     self.effect:update(dt)
     local _, _, w, h = self.effect:get_frame():getViewport()
     self.ox = w / 2
@@ -55,9 +43,26 @@ function StoneClaws:update(dt)
     return true
 end
 
-function StoneClaws:draw()
+function Cast:draw()
     love.graphics.setColor(0.3, 0.3, 0.3, 1)
     self.effect:draw(self.x, self.y, self.r, 1, 2, self.ox, self.oy)
+end
+
+local StoneClaws = Class{}
+
+function StoneClaws:init()
+    self.name = 'Stone Claws'
+    self.type = 'unit'
+    self.range = 1
+    self.filter = function(target)
+        if target.actor and not target.actor.is_player then
+            return true
+        end
+        return false
+    end
+    self.element = 'stone'
+    self.cost = 2
+    self.cast = Cast
 end
 
 return StoneClaws

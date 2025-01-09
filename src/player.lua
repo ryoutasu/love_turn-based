@@ -1,5 +1,6 @@
 local Characters = require 'src.characters'
 local ItemList = require 'src.items'
+local SpellList = require 'src.spells'
 
 local function setupCharacter(name)
     local character_table = Characters[name]
@@ -11,6 +12,11 @@ local function setupCharacter(name)
 
     if character.max_health then
         character.health = character.max_health
+    end
+
+    character.spells = {}
+    for index, spell in ipairs(character_table.spells) do
+        table.insert(character.spells, SpellList[spell]())
     end
 
     return character

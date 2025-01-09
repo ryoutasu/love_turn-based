@@ -1,20 +1,8 @@
 local animation = require 'src.animation'
 
-local Healing = Class{
-    name = 'Healing',
-    type = 'unit',
-    range = 10,
-    filter = function(target)
-        if target.actor and target.actor.is_player then
-            return true
-        end
-        return false
-    end,
-    element = 'life',
-    cost = 2,
-}
+local Cast = Class{}
 
-function Healing:init(caster, target)
+function Cast:init(caster, target)
     target = target.actor
 
     self.caster = caster
@@ -35,7 +23,7 @@ function Healing:init(caster, target)
     self.effect = effect
 end
 
-function Healing:update(dt)
+function Cast:update(dt)
     self.effect:update(dt)
     local _, _, w, h = self.effect:get_frame():getViewport()
     self.ox = w / 2
@@ -50,9 +38,26 @@ function Healing:update(dt)
     return true
 end
 
-function Healing:draw()
+function Cast:draw()
     love.graphics.setColor(1, 1, 1, 1)
     self.effect:draw(self.x, self.y, 0, 1, 1, self.ox, self.oy)
+end
+
+local Healing = Class{}
+
+function Healing:init()
+    self.name = 'Healing'
+    self.type = 'unit'
+    self.range = 10
+    self.filter = function(target)
+        if target.actor and target.actor.is_player then
+            return true
+        end
+        return false
+    end
+    self.element = 'life'
+    self.cost = 2
+    self.cast = Cast
 end
 
 return Healing

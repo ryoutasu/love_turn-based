@@ -128,6 +128,7 @@ function Levelmap:enter(from, args)
 
         if isStartingPoint then
             self.currentNode = node
+            node.enemies_count = 1
         end
 
         table.insert(self.nodes, node)
@@ -173,20 +174,9 @@ end
 function Levelmap:openNeighborNodes(node)
     local currentPoint = node.point
 
-    -- for _, path in ipairs(self.pathes) do
-    --     path.isOpen = false
-    -- end
-
     for _, other in ipairs(self.nodes) do
         local point = other.point
         local isNeighbors, edge = self.generator:isNeighbors(currentPoint, point)
-        -- if isNeighbors then
-        --     other.isOpen = true
-        --     other.isDiscovered = true
-        --     edge.path.isOpen = true
-        -- else
-        --     other.isOpen = false
-        -- end
         if isNeighbors then
             if not other.isCompleted then
                 other.isOpen = true
@@ -282,7 +272,7 @@ function Levelmap:mousepressed(x, y, button)
                 if node.isCompleted then
                     -- self:openNeighborNodes(node)
                 else
-                    Gamestate.push(node:getGamestate(), { player = self.player, type = node.type })
+                    Gamestate.push(node:getGamestate(), { player = self.player, node = node })
                 end
     
                 PlaySound(ButtonClickSound)
