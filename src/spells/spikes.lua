@@ -1,65 +1,89 @@
-local animation = require 'src.animation'
+-- local animation = require 'src.animation'
 
-local multiplier = 1.5
+-- local multiplier = 1.5
 
-local Cast = Class{}
+-- local Cast = Class{}
 
-function Cast:init(caster, target)
-    target = target.actor
+-- function Cast:init(caster, target)
+--     target = target.actor
 
-    self.caster = caster
-    self.target = target
+--     self.caster = caster
+--     self.target = target
 
-    self.x = target.x
-    self.y = target.y
+--     self.x = target.x
+--     self.y = target.y
 
-    local effect = animation('resources/Spikes/1.png', true)
-    local x = 0
-    local y = 0
-    for i = 1, 6 do
-        effect:add_frame(x, y, 32, 32)
-        x = x + 32
-    end
-    effect.frameTime = 0.15
-    effect.play = true
-    self.effect = effect
-end
+--     local effect = animation('resources/Spikes/1.png', true)
+--     local x = 0
+--     local y = 0
+--     for i = 1, 6 do
+--         effect:add_frame(x, y, 32, 32)
+--         x = x + 32
+--     end
+--     effect.frameTime = 0.15
+--     effect.play = true
+--     self.effect = effect
+-- end
 
-function Cast:update(dt)
-    self.effect:update(dt)
-    local _, _, w, h = self.effect:get_frame():getViewport()
-    self.ox = w / 2
-    self.oy = h / 2
-    if self.effect.play then
-        return false
-    end
+-- function Cast:update(dt)
+--     self.effect:update(dt)
+--     local _, _, w, h = self.effect:get_frame():getViewport()
+--     self.ox = w / 2
+--     self.oy = h / 2
+--     if self.effect.play then
+--         return false
+--     end
 
-    local damage = self.caster.damage * multiplier
-    self.target:take_damage(self.caster, damage)
+--     local damage = self.caster.damage * multiplier
+--     self.target:take_damage(self.caster, damage)
     
-    return true
-end
+--     return true
+-- end
 
-function Cast:draw()
-    love.graphics.setColor(1, 1, 1, 1)
-    self.effect:draw(self.x, self.y, 0, 2, 2, self.ox, self.oy)
-end
+-- function Cast:draw()
+--     love.graphics.setColor(1, 1, 1, 1)
+--     self.effect:draw(self.x, self.y, 0, 2, 2, self.ox, self.oy)
+-- end
 
-local Spikes = Class{}
+-- local Spikes = Class{}
 
-function Spikes:init()
-    self.name = 'Spikes'
-    self.type = 'unit'
-    self.range = 5
-    self.filter = function(target)
-        if target.actor and not target.actor.is_player then
-            return true
-        end
-        return false
+-- function Spikes:init()
+--     self.name = 'Spikes'
+--     self.type = 'unit'
+--     self.range = 5
+--     self.filter = function(target)
+--         if target.actor and not target.actor.is_player then
+--             return true
+--         end
+--         return false
+--     end
+--     self.element = 'stone'
+--     self.cost = 3
+--     self.cast = Cast
+-- end
+
+-- return Spikes
+
+local VisualEffect = require 'src.spellcast.visualEffect'
+local SimpleSwoosh = require 'src.spellcast.effects.simpleSwoosh'
+
+return {
+    name = 'Spikes',
+    type = 'unit',
+    range = 5,
+    filter = TargetFactory.enemy,
+    element = 'earth',
+    cost = 3,
+    damage = 15,
+    onCast = function (spellcast, caster, target)
+        local x = caster.x + (target.x - caster.x)/2
+        local y = caster.y + (target.y - caster.y)/2
+        local dx, dy = target.x - caster.x, target.y - caster.y
+        local effect = VisualEffect(SimpleSwoosh(), { x = x, y = y, r = math.atan2(dy, dx), sx = 1, sy = 2 } )
+        effect:setOnComplete(function ()
+            target:take_damage(caster, spellcast.spell.damage)
+            spellcast:complete()
+        end)
+        spellcast:addEffect(effect)
     end
-    self.element = 'stone'
-    self.cost = 3
-    self.cast = Cast
-end
-
-return Spikes
+}

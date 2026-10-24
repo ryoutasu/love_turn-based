@@ -9,12 +9,12 @@ local defualtFont = love.graphics.newFont(20)
 local bigFont = love.graphics.newFont(24)
 
 local frameY = 300
-local frameWidth = 220
-local frameHeight = 350
+local frameWidth = 250
+local frameHeight = 400
 
 local Frame = Class{}
 
-function Frame:init(cx, cy, name)
+function Frame:init(cx, cy, name1, name2)
     local x = cx - frameWidth/2
     local y = cy - frameHeight/2
     self.x = x
@@ -26,17 +26,25 @@ function Frame:init(cx, cy, name)
     self.w = frameWidth
     self.h = frameHeight
     self.font = defualtFont
-    self.name = name or ''
+    self.name1 = name1 or ''
+    self.name2 = name2 or ''
     self.cursorInside = false
     self.selected = false
 
-    local character = Characters[name]
-    local sprite = Sprite(character.sprite_path)
-    local rect = character.rect
-    local quad = love.graphics.newQuad(0, 0, rect[1], rect[2], rect[3], rect[4])
+    local character1 = Characters[name1]
+    local sprite1 = Sprite(character1.sprite_path, character1.color)
+    local rect1 = character1.rect
+    local quad1 = love.graphics.newQuad(0, 0, rect1[1], rect1[2], rect1[3], rect1[4])
 
-    self.sprite = sprite
-    self.quad = quad
+    local character2 = Characters[name2]
+    local sprite2 = Sprite(character2.sprite_path, character2.color)
+    local rect2 = character2.rect
+    local quad2 = love.graphics.newQuad(0, 0, rect2[1], rect2[2], rect2[3], rect2[4])
+
+    self.sprite1 = sprite1
+    self.quad1 = quad1
+    self.sprite2 = sprite2
+    self.quad2 = quad2
     self.scale = 1
 end
 
@@ -84,110 +92,81 @@ function Frame:draw()
     love.graphics.rectangle('line', self.x, self.y, self.w, self.h, corner, corner)
 
     love.graphics.setColor(1, 1, 1, 1)
-    local x, y = self.cx - self.sprite.w / 2 * self.scale, self.cy - self.sprite.h / 2 * self.scale + 50
-    self.sprite:draw(_, x, y, 0, self.scale, self.scale)
+    local x, y = self.x + 20 * self.scale, self.y + 20 * self.scale
+    self.sprite1:draw(_, x, y, 0, self.scale, self.scale)
 
-    local textW = self.font:getWidth(self.name)
+    love.graphics.setColor(1, 1, 1, 1)
+    x, y = self.x + self.w - 20 * self.scale - self.sprite2.w * self.scale, self.y + self.h - 20 * self.scale - self.sprite2.w * self.scale
+    self.sprite2:draw(_, x, y, 0, self.scale, self.scale)
+
+    -- local textW = self.font:getWidth(self.name1)
+    local textH = self.font:getHeight()
 
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.setFont(self.font)
-    PrintText(self.name, self.cx - textW / 2 - 4, self.y + 10)
-    -- love.graphics.print(self.name, self.cx - textW / 2, self.y + textH)
-    -- love.graphics.print(self.name, self.x, self.y)
+    PrintfText(self.name1, self.x, self.cy - textH / 2 - 4, self.w, 'center')
+    PrintfText(self.name2, self.x, self.cy + textH / 2 + 4, self.w, 'center')
 
     love.graphics.setLineWidth(1)
 end
 
-local CharacterSelect = Class{}
+local CharacterSelect = {}
 
 function CharacterSelect:init()
-    local u = Urutora:new()
 
-    local seedLabel = u.label({
-        x = 0, y = 0,
-        w = 60, h = 20,
-        text = 'Seed:',
-        align = 'left'
-    })
-
-    local seedText = u.text({
-        x = 70, y = 0,
-        w = 110, h = 20,
-        text = tostring(os.time()),
-        align = 'right'
-    })
-
-    u:add(seedLabel)
-    u:add(seedText)
-
-    self.seedText = seedText
-
-    self.u = u
 end
 
 function CharacterSelect:enter()
-    -- bad seeds:
-    -- self.seedText.text = tostring(1730817105)
-    -- self.seedText.text = tostring(1730817753)
-    -- self.seedText.text = tostring(1730817859)
-    -- 1730817996
-    -- self.seedText.text = tostring(1730818012)
-    -- self.seedText.text = tostring(1730824587)
-    -- self.seedText.text = tostring(1730824867)
-    self.seedText.text = tostring(os.time())
+    self.seed = tostring(os.time())
 
     self.frames = {}
 
-    local frame_1 = Frame(320, frameY, 'Emberpuff')
-    local frame_2 = Frame(640, frameY, 'Leafen')
-    local frame_3 = Frame(960, frameY, 'Terrow')
+    local frame_1 = Frame(260, frameY, 'Emberpuff', 'Aetheris')
+    local frame_2 = Frame(640, frameY, 'Leafen', 'Dewscale')
+    local frame_3 = Frame(1020, frameY, 'Terrow', 'Quillpaw')
 
     table.insert(self.frames, frame_1)
     table.insert(self.frames, frame_2)
     table.insert(self.frames, frame_3)
 
-    local w, h = 200, 50
-    local x, y = 640 - w/2, 600
-    local selectButton = Urutora.button({
-        x = x, y = y,
-        w = w, h = h,
-        text = 'Select',
-        pressSound = ButtonClickSound
-    }):action(function (e)
-        print('Seed: ' .. self.seedText.text)
-        Gamestate.switch(Levelmap, { seed = tonumber(self.seedText.text), character = self.selectedFrame.name })
-    end):disable()
-
-    self.selectButton = selectButton
-    self.u:add(selectButton)
     self.selectedFrame = nil
 end
 
 function CharacterSelect:update(dt)
-    self.u:update(dt)
     for _, frame in ipairs(self.frames) do
         frame:update(dt)
     end
 end
 
 function CharacterSelect:draw()
-    self.u:draw()
+    UI.nextPosition("TOPLEFT", "root")
+    UI.text(4, 4, "Seed:", "TOPLEFT")
+    UI.nextPosition("RIGHT")
+    self.seed = UI.inputText("seed_input", 2, 0, 110, 20, self.seed, "LEFT")
+
+    UI.nextPosition("BOTTOM", "root")
+    if UI.button("select_character", 0, -70, 200, 50, "Select", "BOTTOM", self.selectedFrame ~= nil) then
+        PlaySound(ButtonClickSound)
+        print('Seed: ' .. self.seed)
+        Gamestate.push(FadeInState, { color = { r = 1, g = 1, b = 1 }, time = 1, onFadeComplete = function()
+            IntroMusic:stop()
+            FieldMusic:play()
+
+            Gamestate.switch(TownState, { seed = tonumber(self.seed), characters = { self.selectedFrame.name1, self.selectedFrame.name2 } })
+            Gamestate.push(FadeOutState, { color = { r = 1, g = 1, b = 1 }, time = 1 })
+        end })
+    end
+
     for _, frame in ipairs(self.frames) do
         frame:draw()
     end
 end
 
 function CharacterSelect:mousepressed(x, y, button)
-    self.u:pressed(x, y, button)
-
-    if self.selectButton.pressed then return end
-
-    -- self.selectedFrame = nil
     local selectedFrame
     for _, frame in ipairs(self.frames) do
         if frame.cursorInside then
             selectedFrame = frame
-            self.selectButton:enable()
         end
     end
 
@@ -200,19 +179,12 @@ function CharacterSelect:mousepressed(x, y, button)
 
         PlaySound(ButtonClickSound)
     end
-
-    -- if not self.selectedFrame then
-    --     self.selectButton:disable()
-    -- end
 end
 
-function CharacterSelect:mousereleased(x, y, button)
-    self.u:released(x, y, button)
+function CharacterSelect:keypressed(key)
+    if key == "escape" then
+        Gamestate.switch(MainMenuState)
+    end
 end
-
--- function CharacterSelect:mousemoved(x, y, dx, dy) self.u:moved(x, y, dx, dy) end
-function CharacterSelect:textinput(text) self.u:textinput(text) end
-function CharacterSelect:keypressed(...) self.u:keypressed(...) end
--- function CharacterSelect:wheelmoved(x, y) self.u:wheelmoved(x, y) end
 
 return CharacterSelect

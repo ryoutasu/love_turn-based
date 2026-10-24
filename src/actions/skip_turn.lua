@@ -10,6 +10,7 @@ end
 
 function Skip:start()
     Tagtext:add('Skip', self.actor.x - 25, self.actor.y - 40, 2, 30, { 1, 1, 1 })
+    BattleState.end_turn = true
 end
 
 function Skip:update(dt)

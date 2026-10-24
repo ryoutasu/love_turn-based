@@ -1,84 +1,78 @@
-local titleFont = love.graphics.newFont(30)
+local SaveManager = require 'src.save_manager'
+local Player      = require 'src.player'
+local RunState    = require 'src.states.run_state'
 
-local MainMenu = Class{}
+local titleFont = love.graphics.newFont(34)
+local smallFont = love.graphics.newFont(20)
 
-local titleX, titleY = 50, 50
-local titleW, titleH = 400, 50
+local MainMenu = {}
 
-local smallTitleX = titleX + 2
-local smallTitleY = titleY + titleH - 10
-local smallTitleW, smallTitleH = 200, 20
+local titleX, titleY = 55, 55
+local startGameButtonW, startGameButtonH = 150, 60
 
-local startGameButtonX = titleX + 10
-local startGameButtonY = titleY + titleH + smallTitleH + 50
-local startGameButtonW, startGameButtonH = 100, 40
-
--- local testButtonX = titleX + 10
--- local testButtonY = titleY + titleH + smallTitleH + 50
--- local testButtonW, testButtonH = 100, 40
-
-function MainMenu:init()
-    local u = Urutora:new()
-    
-    local titleLabel = Urutora.label({
-        x = titleX, y = titleY,
-        w = titleW, h = titleH,
-        text = 'Neuromon adventures',
-        align = 'left',
-    }):setStyle({ font = titleFont, bgColor = { 1, 1, 1, 0 } })
-
-    local smallTitleLabel = Urutora.label({
-        x = smallTitleX, y = smallTitleY,
-        w = smallTitleW, h = smallTitleH,
-        text = 'or something like that',
-        align = 'left',
-    }):setStyle({ bgColor = { 1, 1, 1, 0 } })
-
-    local startGameButton = Urutora.button({
-        x = startGameButtonX, y = startGameButtonY,
-        w = startGameButtonW, h = startGameButtonH,
-        text = 'Start game',
-        align = 'center',
-        pressSound = ButtonClickSound
-    }):action(function (e)
-        -- Gamestate.switch(CharacterSelect)
-        Gamestate.push(CharacterSelect)
-    end)
-
-    -- local testButton = Urutora.button({
-    --     x = testButtonX, y = testButtonY,
-    --     w = testButtonW, h = testButtonH,
-    --     text = 'Test',
-    --     align = 'center',
-    -- }):action(function (e)
-    --     Gamestate.switch(Roadmap)
-    -- end)
-
-    u:add(titleLabel)
-    u:add(smallTitleLabel)
-    u:add(startGameButton)
-    -- u:add(testButton)
-
-    self.u = u
-end
+function MainMenu:init() end
 
 function MainMenu:enter()
-    
+    IntroMusic:play()
 end
 
-function MainMenu:update(dt)
-    self.u:update(dt)
-end
+function MainMenu:leave() end
+function MainMenu:update(dt) end
 
 function MainMenu:draw()
-    self.u:draw()
+    UI.nextPosition("TOPLEFT")
+    UI.text(titleX + 2, titleY + 2, "DumbBeasts adventures", "TOPLEFT", { 0.3, 0.3, 0.3, 1 }, titleFont)
+    UI.text(titleX, titleY, "DumbBeasts adventures", "TOPLEFT", { 1, 1, 1, 1 }, titleFont)
+
+    UI.nextPosition("BOTTOMLEFT")
+    UI.text(4, 7, "or something like that", "TOPLEFT", { 0.3, 0.3, 0.3, 1 }, smallFont)
+    UI.text(2, 5, "or something like that", "TOPLEFT", { 1, 1, 1, 1 }, smallFont)
+
+    UI.nextPosition("BOTTOMLEFT")
+    if UI.button("start_game", 0, 50, startGameButtonW, startGameButtonH,
+        "Start game", "TOPLEFT") then
+        PlaySound(ButtonClickSound)
+        Gamestate.switch(CharacterSelect)
+    end
+
+    -- Load — только если есть сохранение
+    if SaveManager.exists() then
+        UI.nextPosition("BOTTOMLEFT")
+        if UI.button("load_game", 0, 20, startGameButtonW, startGameButtonH,
+            "Continue", "TOPLEFT") then
+            PlaySound(ButtonClickSound)
+            self:_loadGame()
+        end
+        UI.nextPosition("BOTTOMLEFT")
+        if UI.button("town_delete_save", 0, 20, startGameButtonW, startGameButtonH,
+            "Delete save", "TOPLEFT") then
+            SaveManager.delete()
+            PlaySound(ButtonClickSound)
+        end
+    end
 end
 
-function MainMenu:mousepressed(x, y, button) self.u:pressed(x, y, button) end
-function MainMenu:mousereleased(x, y, button) self.u:released(x, y) end
-function MainMenu:keypressed(key, scancode, isrepeat) self.u:keypressed(key, scancode, isrepeat) end
-function MainMenu:mousemoved(x, y, dx, dy) self.u:moved(x, y, dx, dy) end
-function MainMenu:textinput(text) self.u:textinput(text) end
-function MainMenu:wheelmoved(x, y) self.u:wheelmoved(x, y) end
+function MainMenu:_loadGame()
+    local data = SaveManager.load()
+    if not data then
+        PlaySound(ErrorSound)
+        return
+    end
+
+    local player = Player()
+    player:deserialize(data.player)
+
+    RunState:deserialize(data.run)
+
+    if data.screen == 'levelmap' and data.levelmap then
+        Gamestate.switch(Levelmap, {
+            player         = player,
+            load_from_save = true,
+            save_data      = data.levelmap,
+        })
+    else
+        Gamestate.switch(TownState, { player = player })
+    end
+end
 
 return MainMenu

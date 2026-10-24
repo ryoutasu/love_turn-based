@@ -42,7 +42,7 @@ function Pathfinder:get_neighbors(node)
     local x, y = node.tx, node.ty
     local neighbors_offset = even(y) and neighbors_offset_even or neighbors_offset_odd
     for i, offset in ipairs(neighbors_offset) do
-        local tnode = self.map:get_node(x + offset[1], y + offset[2])
+        local tnode = self.map:get_tile(x + offset[1], y + offset[2])
         nodes[i] = false
         if tnode and tnode.cost ~= 0
         then
@@ -89,8 +89,7 @@ function Pathfinder:calculate(start)
                     if not explored[neighbor] then
                         local tentative = gscore[current] + neighbor.cost
 
-                        if --[[ (check_blocked or not neighbor.is_blocked)
-                        and ]] (not reachable[neighbor] or tentative < gscore[neighbor]) then
+                        if (not reachable[neighbor] or tentative < gscore[neighbor]) then
                             reachable[neighbor] = true
                             gscore[neighbor] = tentative
                             -- neighbor.parent = current
@@ -108,7 +107,8 @@ end
 local abs = math.abs
 function Pathfinder:calculate_range(start, max_range, draw_borders)
     local actor = BattleState:current_actor()
-    local state = BattleState.state
+    local target_mode = BattleState.target_mode
+    local phase = BattleState.phase
 
     for _, node in pairs(self.map.tiles._props) do
         local dx = start.tx - node.tx
@@ -120,14 +120,14 @@ function Pathfinder:calculate_range(start, max_range, draw_borders)
         local range = math.max(abs(dy), abs(dx) + math.floor(abs(dy) / 2) + p)
         node.range = range
 
-        if state == 'waiting' then
+        if phase == 'idle' then
             if range <= max_range and node.actor and actor:enemy_to(node.actor) then
                 node.can_be_selected = true
                 node:change_color()
             end
         end
 
-        if state == 'drawing_path' then
+        if target_mode == 'drawing_path' then
             if range <= max_range+1 and node.actor and actor:enemy_to(node.actor) then
                 node.can_be_selected = true
                 node:change_color()
@@ -137,6 +137,25 @@ function Pathfinder:calculate_range(start, max_range, draw_borders)
             end
         end
     end
+end
+
+function Pathfinder:getTilesInRange(start, max_range)
+    local tiles = {}
+    for _, node in pairs(self.map.tiles._props) do
+        local dx = start.tx - node.tx
+        local dy = start.ty - node.ty
+
+        local p = ((odd(start.ty) and even(node.ty) and (start.tx < node.tx))
+            or (odd(node.ty) and even(start.ty) and (node.tx < start.tx)) ) and 1 or 0
+
+        local range = math.max(abs(dy), abs(dx) + math.floor(abs(dy) / 2) + p)
+    
+        if range <= max_range then
+            tiles[#tiles+1] = node
+        end
+    end
+
+    return tiles
 end
 
 function Pathfinder:calculate_range2(start, max_range)

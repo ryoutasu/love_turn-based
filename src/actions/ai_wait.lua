@@ -12,14 +12,14 @@ function AI_Wait:init(actor)
 end
 
 function AI_Wait:start()
-    self.actor.node:set_animation('border_fill', decide_time, { 1, 0, 0, 1 })
+    self.actor.tile:set_animation('border_fill', decide_time, { 1, 0, 0, 1 })
     self.time = 0
 end
 
 function AI_Wait:update(dt)
     self.time = self.time + dt
     if self.time > decide_time then
-        self.actor.node:set_animation(nil)
+        self.actor.tile:set_animation(nil)
         return true
     end
     return false

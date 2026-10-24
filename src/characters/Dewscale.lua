@@ -6,14 +6,20 @@ return {
     rect = { 140 * scale, 140 * scale, 140 * scale, 140 * scale },
     scale = scale,
 
-    max_health = 50,
-    damage = 10,
+    max_health = 25,
+    damage = 6,
     attack_range = 1,
     move_range = 4,
     initiative = 10,
-    max_energy = 20,
+    armor = 0,
+    max_energy = 15,
+    
     spells = {
-        'claws'
+        'water_bolt'
     },
-    element = 'water'
+    
+    attribute = 'wild',
+    element = 'water',
+    
+    starter_character = true
 }

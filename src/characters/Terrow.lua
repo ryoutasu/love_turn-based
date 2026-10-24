@@ -6,16 +6,21 @@ return {
     rect = { 140 * scale, 140 * scale, 140 * scale, 140 * scale },
     scale = scale,
 
-    max_health = 120,
-    damage = 8,
+    max_health = 40,
+    damage = 4,
     attack_range = 1,
     move_range = 3,
     initiative = 6,
     armor = 2,
-    max_energy = 20,
+    max_energy = 9,
 
     spells = {
-        'claws'
+        -- 'claws',
+        'armor_up'
     },
-    element = 'stone'
+    
+    attribute = 'wild',
+    element = 'earth',
+    
+    starter_character = true
 }

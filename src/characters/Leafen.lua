@@ -6,16 +6,21 @@ return {
     rect = { 140 * scale, 140 * scale, 140 * scale, 140 * scale },
     scale = scale,
 
-    max_health = 80,
-    damage = 9,
+    max_health = 20,
+    damage = 5,
     attack_range = 1,
     move_range = 3,
     initiative = 7,
     armor = 1,
-    max_energy = 20,
+    max_energy = 12,
 
     spells = {
-        'spit',
+        -- 'spit',
+        'leaf_strike'
     },
-    element = 'nature'
+    
+    attribute = 'mystic',
+    element = 'plant',
+    
+    starter_character = true
 }

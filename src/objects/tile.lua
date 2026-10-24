@@ -31,6 +31,8 @@ function Tile:init(x, y, tx, ty, cost)
     self.show_as_attack_range = false
     self.aoe_target = false
     self.borders = { false, false, false, false, false, false }
+
+    self.effects = {}
     
     self:change_color()
 end
@@ -63,7 +65,7 @@ function Tile:change_color()
     end
 
     if self.cursor_inside then
-        self.color = Urutora.utils.brighter(color, 0.35)
+        self.color = Brighter(color, 0.35)
     else
         self.color = color
     end
@@ -71,7 +73,7 @@ end
 
 function Tile:open_to_move()
     self.is_open = true
-    if BattleState.state == 'waiting' or BattleState.state == 'drawing_path' then
+    if BattleState.phase == 'idle' or BattleState.state == 'drawing_path' then
         self:change_color()
     end
 end
@@ -94,8 +96,8 @@ function Tile:set_animation(anim, time, color)
     end
 end
 
-function Tile:set_path_sprite_direction(next_node)
-    local dx, dy = next_node.x - self.x, next_node.y - self.y
+function Tile:set_path_sprite_direction(next_tile)
+    local dx, dy = next_tile.x - self.x, next_tile.y - self.y
 
     local r = Vector(dx, dy):angleTo()
     self.path_sprite_rotation = r
@@ -104,10 +106,15 @@ end
 function Tile:get_path()
     local path = {}
     local current = self
-    repeat
+    -- repeat
+    --     table.insert(path, 1, current)
+    --     current = current.parent
+    -- until not current.parent
+    while current.parent do
         table.insert(path, 1, current)
         current = current.parent
-    until not current.parent
+    end
+
     return path
 end
 
@@ -125,7 +132,6 @@ function Tile:show_path(first)
 end
 
 function Tile:hide_path()
-    -- print('hide path')
     self.as_path = false
     self:set_animation()
     if self.parent then
@@ -135,9 +141,24 @@ function Tile:hide_path()
     end
 end
 
+function Tile:add_effect(effect, pos)
+    if pos then
+        table.insert(self.effects, pos, effect)
+    else
+        table.insert(self.effects, effect)
+    end
+end
+
 function Tile:update(dt)
     if self.animation then
         self.animation:update(dt)
+    end
+
+    for i, effect in ipairs(self.effects) do
+        effect:update(dt)
+        if effect.triggered then
+            table.remove(self.effects, i)
+        end
     end
 end
 
@@ -185,7 +206,7 @@ function Tile:draw()
     love.graphics.polygon('fill', points)
     -- color = OUTLINE_COLOR[self.color_id]
 
-    -- color = Urutora.utils.darker(color, 1)
+    -- color = Darker(color, 1)
     love.graphics.setColor(0.25, 0.25, 0.25, 1)
     love.graphics.polygon('line', points)
 
@@ -220,6 +241,10 @@ function Tile:draw()
         local s = self.path_sprite
         love.graphics.setColor(1, 1, 1, 1)
         s:draw(_, x, y, self.path_sprite_rotation, 1, 1, s.w/2, s.h/2)
+    end
+    
+    for _, effect in ipairs(self.effects) do
+        effect:draw(self)
     end
 
     -- if self.parent then

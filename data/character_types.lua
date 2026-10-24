@@ -1,0 +1,17 @@
+return {
+    Aetheris = { attribute = 'mystic', element = 'light' },
+    Blazeflare = { attribute = 'mystic', element = 'ember' },
+    Brambleclaw = { attribute = 'mystic', element = 'plant' },
+    Dewscale = { attribute = 'wild', element = 'water' },
+    Emberpuff = { attribute = 'wild', element = 'ember' },
+    Flarevine = { attribute = 'mystic', element = 'plant' },
+    Frostling = { attribute = 'wild', element = 'water' },
+    Leafen = { attribute = 'mystic', element = 'plant' },
+    Marilix = { attribute = 'mystic', element = 'water' },
+    Mystwing = { attribute = 'wild', element = 'storm' },
+    Nightshade = { attribute = 'wild', element = 'dark' },
+    Quillpaw = { attribute = 'wild', element = 'earth' },
+    Rockjaw = { attribute = 'mystic', element = 'earth' },
+    Sylphine = { attribute = 'mystic', element = 'plant' },
+    Terrow = { attribute = 'wild', element = 'earth' },
+}

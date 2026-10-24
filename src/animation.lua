@@ -10,6 +10,7 @@ function Animation:init(path, once, frameTime)
     self.currentFrame = 1
     self.once = once or false
     self.play = true
+    self.completed = false
 end
 
 function Animation:add_frame(x, y, w, h)
@@ -33,6 +34,7 @@ function Animation:update(dt)
             self.time = self.time - self.frameTime
             if self.currentFrame == #self.frames and self.once then
                 self.play = false
+                self.completed = true
             else
                 self.currentFrame = self.currentFrame % #self.frames + 1
             end

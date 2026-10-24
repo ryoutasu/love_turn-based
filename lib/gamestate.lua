@@ -29,7 +29,7 @@ local stack = {state_init}
 local initialized_states = setmetatable({}, {__mode = "k"})
 local state_is_dirty = true
 
-local GS = {}
+local GS = { stack = stack }
 function GS.new(t) return t or {} end -- constructor - deprecated!
 
 local function change_state(stack_offset, to, ...)

@@ -1,3 +1,4 @@
+---@class Action
 local Action = Class{}
 
 function Action:init(actor)

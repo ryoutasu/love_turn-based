@@ -2,11 +2,30 @@ local Sprite = Class{}
 
 local images = {}
 
-function Sprite:init(path)
+function Sprite:init(path, color)
     local image = images[path]
     if image == nil then
-        image = love.graphics.newImage(path)
-        images[path] = image
+        if path and love.filesystem.getInfo(path) then
+            image = love.graphics.newImage(path)
+            images[path] = image
+        else
+            local radius = 140 * CHARACTERS_SCALE/2 -8
+            local imageData = love.image.newImageData(140 * CHARACTERS_SCALE, 140 * CHARACTERS_SCALE)
+            imageData:mapPixel(function (x,y, r,g,b,a)
+                local ax, ay = x - radius - 8, y - radius - 8
+                if (ax * ax + ay * ay) <= radius*radius then
+                    if color then
+                        return love.math.colorFromBytes(color)
+                    else
+                        return 1, 0, 1, 1
+                    end
+                end
+                
+                return 0, 0, 0, 0
+            end)
+
+            image = love.graphics.newImage(imageData)
+        end
     end
     self.image = image
     self.path = path

@@ -1,28 +1,30 @@
+local Item = require 'src.item'
 local action = require 'src.actions.action'
 local tween = require 'lib.tween'
 
-local Item = Class{}
-Item:include(action)
-Item.name = 'Item'
+local ItemAction = Class{}
+ItemAction:include(action)
+ItemAction.name = 'Item'
 
 ---Spell class
----@param player table
+---@param caster table
 ---@param item table
 ---@param target table tile
-function Item:init(player, item, target)
-    action.init(self, player)
+function ItemAction:init(caster, item, target)
+    action.init(self, caster)
 
     self.target = target
-    self.item = item(player, target)
+    -- self.item = item(caster, target)
+    self.item = Item(item, caster, target)
 
-    player:useItem(item, 1)
+    caster:removeItem(item, 1)
 end
 
-function Item:start()
+function ItemAction:start()
     -- Tagtext:add(self.item.name, self.actor.x - 25, self.actor.y - 40, 2, 30, { 1, 1, 1 })
 end
 
-function Item:update(dt)
+function ItemAction:update(dt)
     local complete = self.item:update(dt)
 
     if complete then
@@ -34,8 +36,8 @@ function Item:update(dt)
     return complete
 end
 
-function Item:draw()
+function ItemAction:draw()
     self.item:draw()
 end
 
-return Item
+return ItemAction

@@ -1,97 +1,266 @@
+-- src/eventstate.lua
 local Events = require 'src.events'
 
-local EventState = Class{}
+local EventState = {}
+
+-- ================================================================
+-- Fonts / Layout / Colors
+-- ================================================================
+
+local titleFont  = love.graphics.newFont(26)
+local textFont   = love.graphics.newFont(17)
+local buttonFont = love.graphics.newFont(17)
+
+local PANEL_MARGIN_H = 80
+local PANEL_MARGIN_V = 60
+local TEXT_PADDING   = 32
+
+local BUTTON_W   = 340
+local BUTTON_H   = 56
+local BUTTON_GAP = 14
+
+local COLOR_PANEL_BG     = { 0.08, 0.09, 0.14, 0.94 }
+local COLOR_PANEL_BORDER = { 0.45, 0.55, 0.75, 1 }
+local COLOR_TITLE        = { 1, 0.85, 0.4, 1 }
+local COLOR_TEXT         = { 0.95, 0.95, 0.95, 1 }
+local COLOR_BUTTON       = { 0.45, 0.52, 0.72, 1 }
+
+-- ================================================================
+-- Lifecycle
+-- ================================================================
 
 function EventState:init()
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-
-    local u = Urutora:new()
-
-    local w, h = windowWidth / 2 - 20, windowHeight / 2
-    local x, y = 75, windowHeight / 2 - h / 2
-    local textLabel = u.label{
-        x = x, y = y,
-        w = w, h = h,
-        'Lorem ipsum dolor sit amet',
-        align = 'center'
-    }
-
-    u:add(textLabel)
-
-    self.textLabel = textLabel
-
-    self.u = u
-
-    self.currentStep = 0
-    self.buttons = {}
+    self.steps         = nil
+    self.currentStep   = 0
+    self.player        = nil
+    self.title         = nil
+    self._closed       = false
+    self._entered_step = false
 end
 
 function EventState:enter(from, args)
-    self.type = args.node.type
-    self.player = args.player
+    self.player        = args.player
+    self._closed       = false
+    self._entered_step = false
 
-    -- for i, button in ipairs(self.buttons) do
-    --     self.u:remove(button)
-    -- end
-    -- self.buttons = {}
-
-    local steps = Events.buyItem(args.player)
-    self.steps = steps
-
-    self:setupStep(1)
-end
-
-function EventState:setupStep(step)
-    step = step or 0
-    if step == 0 then Gamestate.pop(); return end
-
-    self.currentStep = step
-
-    local windowWidth = love.graphics.getWidth()
-    local windowHeight = love.graphics.getHeight()
-
-    for i, button in ipairs(self.buttons) do
-        self.u:remove(button)
+    -- Получаем определение события.
+    -- Поддерживаем два формата возврата:
+    --   1) возвращает таблицу шагов напрямую (старый формат)
+    --   2) возвращает { steps = <шаги>, title = <заголовок> } (новый)
+    local event_def = (args.node and args.node.event) or Events["abandonedCamp"]
+    if not event_def then
+        self.steps = nil
+        return
     end
 
-    self.textLabel.text = self.steps[self.currentStep].text
-
-    local n = #self.steps[self.currentStep].buttons
-    local w, h = 200, 60
-    local width = (n - 1) * (h + 10)
-    for i, button in ipairs(self.steps[self.currentStep].buttons) do
-        local x = windowWidth * 3 / 4 - w / 2
-        local y = windowHeight / 2 - h / 2 - width / 2 + (i-1) * (h + 20)
-
-        local b = Urutora.button{
-            x = x, y = y,
-            w = w, h = h,
-            text = button.text,
-            align = 'center'
-        }:action(function ()
-            self:setupStep(button.action())
-        end)
-
-        self.u:add(b)
-
-        table.insert(self.buttons, b)
+    local result = event_def(self.player)
+    if type(result) == 'table' and result.steps then
+        self.steps = result.steps
+        self.title = result.title
+    else
+        self.steps = result
+        self.title = nil
     end
+
+    self.currentStep = 1
 end
+
+function EventState:leave()
+    self.steps  = nil
+    self.player = nil
+    self.title  = nil
+end
+
+-- ================================================================
+-- Update
+-- ================================================================
 
 function EventState:update(dt)
-    self.u:update(dt)
+    if not self.steps then
+        self:_close()
+        return
+    end
+
+    local step = self.steps[self.currentStep]
+    if not step then
+        self:_close()
+        return
+    end
+
+    -- Один раз на вход в шаг — колбэк on_enter
+    if not self._entered_step then
+        self._entered_step = true
+        if step.on_enter then
+            step.on_enter(self.player, step)
+        end
+    end
+
+    self:_draw_step(step)
 end
+
+function EventState:_close()
+    if self._closed then return end
+    
+    Gamestate.push(FadeInState, {
+        color = { 1, 1, 1, 1 },
+        time = 1,
+        onFadeComplete = function()
+            self._closed = true
+            Levelmap.active = true
+            Gamestate.pop({ complete = true })
+            Gamestate.push(FadeOutState, { color = { 1, 1, 1, 1 }, time = 1 })
+        end
+    })
+end
+
+-- ================================================================
+-- Отрисовка шага
+-- ================================================================
+
+function EventState:_draw_step(step)
+    local sw, sh = love.graphics.getWidth(), love.graphics.getHeight()
+
+    local panel_w = sw - PANEL_MARGIN_H * 2
+    local panel_h = sh - PANEL_MARGIN_V * 2
+    local panel_x = PANEL_MARGIN_H
+    local panel_y = PANEL_MARGIN_V
+
+    -- Панель
+    UI.setStyle({
+        draw_border      = true,
+        border_color     = COLOR_PANEL_BORDER,
+        border_width     = 2,
+        background_color = COLOR_PANEL_BG,
+        corner_radius    = 14,
+    })
+    UI.nextPosition("TOPLEFT", "root")
+    UI.backdrop("event_panel", panel_x, panel_y, panel_w, panel_h, "TOPLEFT")
+
+    -- Заголовок (если есть)
+    local content_y = 32
+    if self.title then
+        UI.setStyle({})
+        UI.setFont(titleFont)
+        UI.nextPosition("TOP", "event_panel")
+        UI.text(0, content_y, self.title, "TOP", COLOR_TITLE)
+        content_y = content_y + titleFont:getHeight() + 20
+    end
+
+    -- Текст с переносом по словам
+    local text_w = panel_w - TEXT_PADDING * 2
+    local text   = step.text or ""
+    if type(text) == 'function' then
+        text = text(self.player, step)
+    end
+
+    local lines   = self:_wrapText(tostring(text), textFont, text_w)
+    local line_h  = textFont:getHeight() + 4
+
+    -- Кнопки (нужны для расчёта свободного места под текст)
+    local buttons = step.buttons or {}
+    if #buttons == 0 then
+        buttons = { { text = "Continue", action = function() return 0 end } }
+    end
+    local n_buttons   = #buttons
+    local total_btn_h = n_buttons * BUTTON_H + (n_buttons - 1) * BUTTON_GAP
+    local btn_start_y = panel_h - total_btn_h - 32
+
+    -- Обрезаем текст, если не влезает
+    local max_text_h = btn_start_y - content_y - 24
+    local max_lines  = math.max(1, math.floor(max_text_h / line_h))
+    if #lines > max_lines then
+        lines = { unpack(lines, 1, max_lines) }
+        lines[max_lines] = lines[max_lines] .. "..."
+    end
+
+    UI.setStyle({})
+    UI.setFont(textFont)
+    UI.nextPosition("TOP", "event_panel")
+    for i, line in ipairs(lines) do
+        UI.text(0, content_y + (i - 1) * line_h, line, "TOP", COLOR_TEXT)
+    end
+
+    -- Кнопки
+    UI.setStyle({
+        draw_border      = true,
+        border_color     = { 0, 0, 0, 1 },
+        background_color = COLOR_BUTTON,
+        corner_radius    = 8,
+    })
+    UI.setFont(buttonFont)
+    UI.nextPosition("TOP", "event_panel")
+
+    for i, button in ipairs(buttons) do
+        local y = btn_start_y + (i - 1) * (BUTTON_H + BUTTON_GAP)
+        if UI.button("event_btn_" .. i, 0, y, BUTTON_W, BUTTON_H,
+            button.text or "...", "TOP") then
+            self:_on_button(button)
+        end
+    end
+end
+
+-- ================================================================
+-- Переход между шагами
+-- ================================================================
+
+function EventState:_on_button(button)
+    PlaySound(ButtonClickSound)
+
+    local next_step = 0
+    if button.action then
+        next_step = button.action(self.player) or 0
+    end
+
+    if next_step == 0 then
+        self:_close()
+    else
+        self._entered_step = false
+        self.currentStep   = next_step
+    end
+end
+
+-- ================================================================
+-- Утилиты
+-- ================================================================
+
+function EventState:_wrapText(text, font, max_width)
+    local lines = {}
+    if not text or text == "" then return lines end
+
+    -- Поддерживаем явные \n (включая пустые строки для отступов)
+    for paragraph in (text .. "\n"):gmatch("([^\n]*)\n") do
+        if paragraph == "" then
+            table.insert(lines, "")
+        else
+            local current = ""
+            for word in paragraph:gmatch("%S+") do
+                local test = (current == "") and word or (current .. " " .. word)
+                if font:getWidth(test) <= max_width then
+                    current = test
+                else
+                    if current ~= "" then table.insert(lines, current) end
+                    current = word
+                end
+            end
+            if current ~= "" then table.insert(lines, current) end
+        end
+    end
+    return lines
+end
+
+-- ================================================================
+-- Draw / input hooks
+-- ================================================================
 
 function EventState:draw()
-    self.u:draw()
+    -- Хук для кастомной графики (иллюстрации, иконки).
+    -- Текст и кнопки рисуются в :update через UI.
 end
 
-function EventState:mousepressed(x, y, button) self.u:pressed(x, y, button) end
-function EventState:mousereleased(x, y, button) self.u:released(x, y) end
-function EventState:keypressed(key, scancode, isrepeat) self.u:keypressed(key, scancode, isrepeat) end
-function EventState:mousemoved(x, y, dx, dy) self.u:moved(x, y, dx, dy) end
-function EventState:textinput(text) self.u:textinput(text) end
-function EventState:wheelmoved(x, y) self.u:wheelmoved(x, y) end
+function EventState:keypressed(key)
+    if key == "escape" then
+        self:_close()
+    end
+end
 
 return EventState

@@ -1,15 +1,15 @@
-local tile = require 'src.objects.tile'
+local Tile = require 'src.objects.tile'
 local coord_mt = require 'lib.coord_table'
 
 local Map = Class{}
 
-local map_offset_x = 0
-local map_offset_y = 0
+local map_offset_x = -10
+local map_offset_y = -20
 
 HEX_OFFSET_X = 4
 HEX_OFFSET_Y = 4
 
-HEX_RADIUS = 60
+HEX_RADIUS = 70
 HEX_HEIGHT = 0.7
 
 local function is_point_inside_hex(x, y, cx, cy)
@@ -66,7 +66,7 @@ function Map:init(width, height)
             local x, y = grid_to_world(i, j)
             x = x + startx
             y = y + starty
-            self.tiles[{i, j}] = tile(x, y, i, j)
+            self.tiles[{i, j}] = Tile(x, y, i, j)
         end
     end
 
@@ -77,9 +77,19 @@ function Map:init(width, height)
     -- self.entering_tile = nil
     -- self.leaving_tile = nil
     self.showing_range = false
+
+    self.tilesSpare = {}
+    for i = 2, 4, 2 do
+        local x, y = grid_to_world(-1, i)
+        x = x + startx
+        y = y + starty
+        local tile = Tile(x, y, -1, i)
+        tile.spare = true
+        table.insert(self.tilesSpare, tile)
+    end
 end
 
-function Map:reset_nodes()
+function Map:reset_tiles()
     for k, t in pairs(self.tiles._props) do
         t:reset()
     end
@@ -87,7 +97,7 @@ function Map:reset_nodes()
     self.showing_range = false
 end
 
-function Map:get_node(x, y)
+function Map:get_tile(x, y)
     local t = self.tiles[{x, y}]
     return t
 end
@@ -106,12 +116,24 @@ function Map:update(dt)
     for k, t in pairs(self.tiles._props) do
         t:update(dt)
     end
+
+    -- if BattleState.state == 'prepare' then
+        for index, tile in ipairs(self.tilesSpare) do
+            tile:update(dt)
+        end
+    -- end
 end
 
 function Map:draw()
     for k, t in pairs(self.tiles._props) do
         t:draw()
     end
+
+    -- if BattleState.state == 'prepare' then
+        for index, tile in ipairs(self.tilesSpare) do
+            tile:draw()
+        end
+    -- end
 
     -- local window_width = love.graphics.getWidth()
     -- local window_height = love.graphics.getHeight()
@@ -133,7 +155,7 @@ function Map:check_highlight_tile(x, y)
     if self.highlighted then
         leaving_tile = self.highlighted
 
-        if BattleState.state == 'waiting' or BattleState.state == 'spell' then
+        if BattleState.phase == 'idle' and BattleState.target_mode == 'none' then
             self.highlighted:hide_path()
         end
 
@@ -153,19 +175,42 @@ function Map:check_highlight_tile(x, y)
 
         tile:change_color()
     end
+    
+    for index, tile in ipairs(self.tilesSpare) do
+        tile.cursor_inside = false
+        tile.aoe_target = false
+
+        is_inside = is_point_inside_hex(x, y, tile.x, tile.y)
+
+        if is_inside then
+            self.highlighted = tile
+            entering_tile = tile
+        end
+
+        tile:change_color()
+    end
 
     if leaving_tile then
         if self.showing_range then
-            BattleState:cancel_target_mode()
             leaving_tile:hide_path()
+            
+            for _, tile in pairs(self.tiles._props) do
+                tile.show_as_range = false
+                tile.show_as_attack_range = false
+
+                tile:change_color()
+            end
             
             self.highlighted = entering_tile
             self.showing_range = false
         end
 
+        if BattleState.target_mode == 'targeting' then
+            leaving_tile:hide_path()
+        end
+
         if leaving_tile.actor then
             leaving_tile.actor.show_name = false
-            leaving_tile.actor.panel.highlighted = false
         end
     end
     
@@ -174,22 +219,35 @@ function Map:check_highlight_tile(x, y)
         
         if entering_tile.actor then
             entering_tile.actor.show_name = true
-            entering_tile.actor.panel.highlighted = true
         end
     end
 end
 
 function Map:cursor_enters_tile(tile)
     local state = BattleState.state
+    local phase = BattleState.phase
+    local target_mode = BattleState.target_mode
     local actor = BattleState:current_actor()
 
     tile:highlight()
 
-    if state == 'waiting' and tile.is_open then
+    if target_mode == 'drawing_path' then
+        if tile ~= self.last_tile then
+            if tile == actor.tile then
+                self.last_tile:hide_path()
+                self:start_drawing_path(tile)
+            else--if tile.is_open or tile.can_be_selected and actor.attack_range == 1 then
+                self:update_drawing_path(tile)
+            end
+        end
+        return
+    end
+
+    if phase == 'idle' and tile.is_open then
         tile:show_path()
     end
 
-    if (state == 'waiting' or state == 'spell') and tile.can_be_selected then
+    if phase == 'idle' and tile.can_be_selected then
         -- if actor is melee, it can move and attack
         if actor.attack_range == 1 and tile.range > 1 then
             tile:show_path()
@@ -200,63 +258,52 @@ function Map:cursor_enters_tile(tile)
         if current_spell and current_spell.type == 'AOE' then
             local selectable = {}
             
-            self:reset_nodes()
+            self:reset_tiles()
             BattleState.pathfinder:calculate_range(tile, current_spell.radius)
             
-            for _, node in pairs(self.tiles._props) do
-                if node.range <= current_spell.radius then
-                    selectable[#selectable+1] = node
+            for _, other_tile in pairs(self.tiles._props) do
+                if other_tile.range <= current_spell.radius then
+                    selectable[#selectable+1] = other_tile
                 end
             end
 
             BattleState:set_target_mode(current_spell)
 
-            for _, node in ipairs(selectable) do
-                node.aoe_target = true
-                node:change_color()
+            for _, other_tile in ipairs(selectable) do
+                other_tile.aoe_target = true
+                other_tile:change_color()
             end
             
             self.highlighted = tile
         end
     end
     
-    if (state == 'waiting' or state == 'prepare') and tile.actor and tile.actor ~= actor then
-        self:show_actor_movement_range(tile)
-    end
-
-    if state == 'drawing_path' then
-        if tile ~= self.last_tile then
-            if tile == actor.node then
-                self.last_tile:hide_path()
-                self:start_drawing_path(tile)
-            else--if tile.is_open or tile.can_be_selected and actor.attack_range == 1 then
-                self:update_drawing_path(tile)
-            end
-        end
+    if (phase == 'idle' or state == 'prepare') and tile.actor and tile.actor ~= actor then
+        self:show_actor_move_range(tile)
     end
 end
 
-function Map:show_actor_movement_range(tile)
+function Map:show_actor_move_range(tile)
     local actor = tile.actor
-    local range = actor.movement_range
+    local range = actor.move_range
 
     local gscore, parents = BattleState.pathfinder:calculate(tile)
 
-    for _, node in pairs(self.tiles._props) do
-        local parent = parents[node]
-        local score = gscore[node]
+    for _, other_tile in pairs(self.tiles._props) do
+        local parent = parents[other_tile]
+        local score = gscore[other_tile] or -1
 
-        if not node.is_blocked then
+        if not other_tile.is_blocked then
             if score > 0 and score <= range then
-                node.show_as_range = true
+                other_tile.show_as_range = true
             end
         end
 
-        if not node.show_as_range and score <= range + 1 and parent and gscore[parent] <= range then
-            node.show_as_attack_range = true
+        if not other_tile.show_as_range and score <= range + 1 and parent and gscore[parent] <= range then
+            other_tile.show_as_attack_range = true
         end
 
-        node:change_color()
+        other_tile:change_color()
     end
 
     self.showing_range = true
@@ -269,15 +316,15 @@ function Map:update_drawing_path(tile)
     local actor = BattleState:current_actor()
     local new_path = {}
     local cut_path = false
-    local last_tile = actor.node
-    for _, node in ipairs(self.drawing_path) do
-        if tile == node then
+    local last_tile = actor.tile
+    for _, drawing_tile in ipairs(self.drawing_path) do
+        if tile == drawing_tile then
             self.last_tile:hide_path()
             cut_path = true
             break
         end
-        new_path[#new_path+1] = node
-        last_tile = node
+        new_path[#new_path+1] = drawing_tile
+        last_tile = drawing_tile
     end
 
     if not (tile.is_open or cut_path or (tile.can_be_selected and actor.attack_range == 1)) then
@@ -286,8 +333,8 @@ function Map:update_drawing_path(tile)
 
     self.drawing_path = new_path
 
-    local movement_range = BattleState:current_actor().movement_range
-    local max_range = movement_range - #new_path - 1
+    local move_range = BattleState:current_actor().move_range
+    local max_range = move_range - #new_path - 1
     if cut_path then
         tile.parent = last_tile
         tile:show_path()
@@ -318,7 +365,8 @@ function Map:update_drawing_path(tile)
         return
     end
 
-    if tile.range == 1 and #new_path < movement_range then
+    -- if tile is farest tile that unit can move to
+    if tile.range == 1 and #new_path < move_range then
         tile.parent = last_tile
         tile:show_path()
 
@@ -333,7 +381,7 @@ function Map:update_drawing_path(tile)
 end
 
 function Map:start_drawing_path(tile)
-    BattleState.state = 'drawing_path'
+    BattleState.target_mode = 'drawing_path'
 
     local new_path = {}
     if tile.is_open or tile.can_be_selected then
@@ -345,8 +393,8 @@ function Map:start_drawing_path(tile)
     self.drawing_path = new_path
     self.last_tile = tile
 
-    local movement_range = BattleState:current_actor().movement_range
-    local max_range = movement_range - #self.drawing_path
+    local move_range = BattleState:current_actor().move_range
+    local max_range = move_range - #self.drawing_path
     -- print('#self.drawing_path = ',#self.drawing_path)
     
     -- if tile.can_be_selected then

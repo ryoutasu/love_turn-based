@@ -10,10 +10,7 @@ local Catcher = Class{
     type = 'unit',
     range = 100,
     filter = function(target)
-        if target.actor and not target.actor.is_player then
-            return true
-        end
-        return false
+        return target.actor and not target.actor.is_player
     end,
     color = { 0.8, 0.1, 0.1, 1 },
 }

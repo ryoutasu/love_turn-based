@@ -1,1 +1,7 @@
 /.vscode
+/release
+/boon.exe
+*.psd
+*.aseprite
+*.zip
+*.love

@@ -101,7 +101,7 @@ function Levelmap:enter(from, args)
     self.currentNode = nil
 
     self.player = {}
-    self.player.party = { [characterName] = character }
+    self.player.charactersActive = { [characterName] = character }
 
     self:generate()
 end

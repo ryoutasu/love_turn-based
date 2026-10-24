@@ -75,7 +75,7 @@ end
 function Inventory:draw()
     love.graphics.setLineWidth(1)
     local color = self.opened and { 0.75, 0.75, 0.75 } or { 0.5, 0.5, 0.5 }
-    if self.cursorInside then color = Urutora.utils.brighter(color) end
+    if self.cursorInside then color = Brighter(color) end
     love.graphics.setColor(color)
     love.graphics.rectangle('fill', self.x, self.y, buttonWidth, buttonHeight)
     love.graphics.setColor(0.0, 0.0, 0.0, 1)
@@ -94,7 +94,7 @@ function Inventory:draw()
         local y = self.y + buttonHeight + offset
         for pos, item in ipairs(self.items) do
             color = { 0.75, 0.75, 0.75 }
-            if item.cursorInside then color = Urutora.utils.brighter(color) end
+            if item.cursorInside then color = Brighter(color) end
             if not self.enabled or not item.isActive then color = { 0.5, 0.5, 0.5 } end
             love.graphics.setColor(color)
             love.graphics.rectangle('fill', x, y, itemWidth, itemHeight)

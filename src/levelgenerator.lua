@@ -54,22 +54,58 @@ function Generator:generate(radius, width, height)
         end
     end
 
-    local endPoint, endIndex
-    local maxDistance = 0
-    for i, point in ipairs(points) do
-        -- local neighborsCount = #point.neighbors
-        local distance = startPoint:dist2(point)
-        point.distance = distance
+    -- local endPoint, endIndex
+    -- local maxDistance = 0
+    -- for i, point in ipairs(points) do
+    --     -- local neighborsCount = #point.neighbors
+    --     local distance = startPoint:dist2(point)
+    --     point.distance = distance
 
-        if point ~= startPoint
-        and not self:isNeighbors(point, startPoint) then
-            if (distance > maxDistance) then
-                endPoint = point
-                endIndex = i
-                maxDistance = distance
+    --     if point ~= startPoint
+    --     and not self:isNeighbors(point, startPoint) then
+    --         if (distance > maxDistance) then
+    --             endPoint = point
+    --             endIndex = i
+    --             maxDistance = distance
+    --         end
+    --     end
+    -- end
+
+    startPoint.cost = 1
+
+    local reachable = { [startPoint] = true }
+    local explored = {}
+
+    local function get_best_point()
+        local best = { cost = 1/0 }
+        for point, value in pairs(reachable) do
+            if point.cost < best.cost then
+                best = point
             end
         end
 
+        return best
+    end
+
+    while next(reachable) do
+        local current = get_best_point()
+
+        reachable[current] = nil
+        explored[current] = true
+
+        for i, neighbor in ipairs(current.neighbors) do
+            if not explored[neighbor] and not reachable[neighbor] then
+                neighbor.cost = current.cost + 1
+                reachable[neighbor] = true
+            end
+        end
+    end
+    
+    local endPoint = { cost = 0 }
+    for index, point in ipairs(points) do
+        if point.cost > endPoint.cost then
+            endPoint = point
+        end
     end
 
     self.startPoint = startPoint

@@ -400,9 +400,7 @@ function Delaunay.triangulate(vertices)
   triangles[#triangles + 1] = Triangle(p1, p2, p3)
 
   for i = 1, nvertices do
-  
     local edges = {}
-    local ntriangles = #triangles
 
     for j = #triangles, 1, -1 do
       local curTriangle = triangles[j]
@@ -417,8 +415,8 @@ function Delaunay.triangulate(vertices)
     for j = #edges - 1, 1, -1 do
       for k = #edges, j + 1, -1 do
         if edges[j] and edges[k] and edges[j]:same(edges[k]) then
+          remove(edges, k)
           remove(edges, j)
-          remove(edges, k-1)
         end
       end
     end

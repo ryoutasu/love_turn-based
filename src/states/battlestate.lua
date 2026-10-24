@@ -1,3 +1,4 @@
+local move = require 'src.actions.move'
 local map = require 'src.map'
 local pathfinder = require 'src.pathfinder'
 local queue = require 'src.actorQueue'
@@ -6,164 +7,181 @@ local Unit = require 'src.objects.unit'
 local inventory = require 'src.inventory'
 local Sprite = require 'src.sprite'
 local Tween = require 'lib.tween'
+local Character = require 'src.character'
+local Characters = require 'src.characters'
+local RunState = require 'src.states.run_state'
 
-local move = require 'src.actions.move'
-local attack = require 'src.actions.attack'
-local ai_wait = require 'src.actions.ai_wait'
 local Actions = require 'src.actions'
+
+local AI = require 'src.ai'
 
 local characterList = require 'src.characters'
 
+local BattleUI = require 'src.battlestate.BattleUI'
+local BattleInput = require 'src.battlestate.BattleInput'
+
+-- Константы (оставлены здесь)
 local fontSize = 14
 local font = love.graphics.newFont(fontSize)
+local mapWidth = 7
+local mapHeight = 5
 
-local resultFontSize = 24
-local resultFont = love.graphics.newFont(resultFontSize)
-
-local rewardsFontSize = 18
-local rewardsFont = love.graphics.newFont(rewardsFontSize)
-
-local stageFontSize = 40
-local stageFont = love.graphics.newFont(stageFontSize)
-
-local energyFontSize = 20
-local energyFont = love.graphics.newFont(energyFontSize)
+-- Вспомогательная функция (осталась локальной)
+local function find_tile(map, offset)
+    for i = offset, offset + 1 do
+        for j = 1, map.height do
+            local tile = map:get_tile(i, j)
+            if tile and not tile.is_blocked then
+                return tile
+            end
+        end
+    end
+    return false
+end
 
 local BattleState = {}
 
 function BattleState:init()
-    self.u = Urutora:new()
-    self.panel = panel(self.u, 15, love.graphics.getHeight() - 210)
+    self.panel = panel(self.u)
     self.result = nil
     self.paused = false
+    self.active = false
 
-    local w, h = 140, 55
-    local x = love.graphics.getWidth()/2 - w/2
-    local y = love.graphics.getHeight()/2 - h/2 - 120
-    local resultLabel = Urutora.label({
-        x = x, y = y,
-        w = w, h = h,
-        text = '',
-        align = 'center'
-    }):deactivate():setStyle({ font = resultFont })
+    -- Инициализация подсистем
+    self.ui = BattleUI(self)          -- отрисовка лога, наград, результата
+    self.input = BattleInput(self)    -- обработка мыши/клавиатуры
 
-    self.rewards_w = resultLabel.w + 20
-    self.rewards_h = 0
-    self.rewards_x = love.graphics.getWidth()/2 - self.rewards_w/2
-    self.rewards_y = resultLabel.y + resultLabel.h + 10
-    
-    w, h = 110, 40
-    x = love.graphics.getWidth()/2 - w/2
-    y = self.rewards_y + 10
-    local resultButton = Urutora.button({
-        x = x, y = y,
-        w = w, h = h,
-        text = 'Continue',
-        align = 'center',
-    }):deactivate():action(function (e)
-        if self.state == 'result' then
-            if self.result == 'lose' then
-                Gamestate.pop({ result = self.result })
-            else
-                self.state = 'rewards'
-                resultLabel.text = 'Rewards:'
-
-                self.rewards_h = 0
-                self.rewards_tween = Tween.new(0.75, self, { rewards_h = 150 }, 'inOutCubic')
-                self.show_rewards_items = false
-                self.rewards_print_progress = 0
-
-                if self.type == 'trainer' then
-                    table.insert(self.rewards, { currency = 'gold', value = 30 })
-                end
-                table.insert(self.rewards, { currency = 'expirience', value = 10 })
-
-                for index, reward in ipairs(self.rewards) do
-                    self.player:addCurrency(reward.currency, reward.value)
-                end
-            end
-        elseif self.state == 'rewards' then
-            Gamestate.pop({ result = self.result })
-        end
-    end):setStyle({ font = rewardsFont })
-
-    self.u:add(resultLabel)
-    self.u:add(resultButton)
-
-    self.resultLabel = resultLabel
-    self.resultButton = resultButton
+    -- Остальные поля (сохранены)
     self.background = Sprite('resources/background.jpg')
-
     self.rewards_print_progress = 0
     self.rewards_tween = nil
     self.rewards = {}
-
+    self.shards_gained = {}
+    self.essence_gained = 0
     self.grabbed_actor = nil
-end
+    self.shaking = 0
+    self.defeatedEnemies = {}
+    self.log = {}
+    self.info_unit = nil
 
-local function find_node(map, offset)
-    for i = offset, offset + 1 do
-        for j = 1, map.height do
-            local node = map:get_node(i, j)
-            if node and not node.is_blocked then
-                return node
-            end
-        end
-    end
+    self.pressed_actor   = nil    -- юнит, на котором нажали ЛКМ
+    self.pressed_x       = 0
+    self.pressed_y       = 0
+    self.drag_started    = false  -- стал ли drag (превысили порог)
+    self.drag_threshold  = 8      -- пикселей, чтобы отличить клик от drag
+    self.pressed_tile    = nil
 
-    return false
+    self.map = nil
+    self.pathfinder = nil
+    self.queue = nil
+    self.type = nil
+    self.objects = {}
+    self.units = {}
+    self.actions = {}
+    self.state = 'none'
+    self.phase = 'none'
+    self.target_mode = 'none'
+    self.current_spell = nil
+    self.action_complete = false
+    self.player = nil
+    self.inventory = nil
+    self.level = 1
+    
+    self._extra_action_available = 0
+    self._extra_action_pending = false
 end
 
 function BattleState:enter(from, args)
+    self.active = true
+    FieldMusic:stop()
+    BattleMusic:play()
+
     self.result = nil
     self.paused = false
+    self.level = args.node and args.node.level or 1
+    self.type = args.node and args.node.type or 'nil'
 
-    self.map = map(8, 6)
+    self.map = map(mapWidth, mapHeight)
     self.pathfinder = pathfinder(self.map)
     self.queue = queue(230, love.graphics.getHeight() - 210)
-    self.type = args.node.type
-
+    self.objects = {}
     self.units = {}
     self.actions = {}
-
+    self.log = { 'Prepare to battle!' }
     self.state = 'prepare'
+    self.phase = 'none'
+    self.target_mode = 'none'
     self.current_spell = nil
     self.action_complete = false
+    
+    self._extra_action_available = 0
+    self._extra_action_pending = false
 
     self.player = args.player
     self.inventory = inventory(100, 10, self.player.inventory)
 
-    for _, character in ipairs(self.player.party) do
-        local node
-        if character.prepare_x and character.prepare_y then
-            node = self.map:get_node(character.prepare_x, character.prepare_y)
+    -- Расстановка игроков (активные)
+    for i = 1, self.player.charactersActiveSize do
+        local character = self.player.charactersActive[i]
+        if character then
+            local tile
+            if character.prepare_x and character.prepare_y then
+                tile = self.map:get_tile(character.prepare_x, character.prepare_y)
+            end
+            if not tile or tile.is_blocked then
+                tile = find_tile(self.map, 0)
+            end
+            self:add_unit(character, true, tile)
         end
-        if not node or node.is_blocked then
-            node = find_node(self.map, 0)
-        end
-        self:add_unit(character, true, true, node)
     end
 
-    local enemy_nodes = {}
-    for i = 0, 1 do
-        for j = 1, self.map.height do
-            local node = self.map:get_node(self.map.width - i, j)
-            if not node.is_blocked then
-                table.insert(enemy_nodes, node)
+    -- Расстановка запасных
+    for i = 1, self.player.charactersSpareSize do
+        local character = self.player.charactersSpare[i]
+        if character then
+            local tile = self.map.tilesSpare[character.prepare_y]
+            if not tile then
+                for _, t in ipairs(self.map.tilesSpare) do
+                    if not t.unit then
+                        tile = t
+                        break
+                    end
+                end
+            end
+            if tile then
+                self:add_unit(character, true, tile, true)
             end
         end
     end
 
-    for i = 1, args.node.enemies_count do
-        local node = table.remove(enemy_nodes, math.random(1, #enemy_nodes))
-        
-        if math.random(10) > 5 then
-            self:add_unit('Quillpaw', false, false, node)
-        else
-            self:add_unit('Dewscale', false, false, node)
+    -- Враги
+    local enemy_tiles = {}
+    for i = 0, 1 do
+        for j = 1, self.map.height do
+            local tile = self.map:get_tile(self.map.width - i, j)
+            if not tile.is_blocked then
+                table.insert(enemy_tiles, tile)
+            end
         end
     end
 
+    local possibleEnemies = {}
+    for name, character in pairs(characterList) do
+        if not character.starter_character then
+            table.insert(possibleEnemies, name)
+        end
+    end
+
+    local enemies_count = args.node and args.node.enemies_count or 2
+    for i = 1, enemies_count do
+        local tile = table.remove(enemy_tiles, math.random(1, #enemy_tiles))
+        local name = possibleEnemies[math.random(#possibleEnemies)]
+        local character = Character.new(Characters[name])
+        local u = self:add_unit(character, false, tile)
+        u.name = u.name .. ' ' .. i
+    end
+
+    -- Открытые клетки для игроков
     for _, tile in pairs(self.map.tiles._props) do
         if tile.tx <= 2 then
             if not tile.actor then
@@ -171,82 +189,136 @@ function BattleState:enter(from, args)
             end
         end
     end
-
-    self.panel.readyButton:setEnabled(true):setVisible(true)
-    -- self.panel.spellPanel:clear()
-    -- self:start_turn()
-end
-
-function BattleState:add_unit(table_or_name, is_player, do_change_character, node)
-    local character = table_or_name
-    if type(table_or_name) == "string" then
-        character = characterList[table_or_name]
-    end
-
-    if not node or node.is_blocked then return false end
-
-    local u = Unit(node, is_player):setup(character, do_change_character)
-
-    table.insert(self.units, u)
-    self.queue:add_actor(u)
-
-    return u
-end
-
-function BattleState:remove_unit(unit)
-    for index, other in ipairs(self.units) do
-        if other == unit then
-            table.remove(self.units, index)
+    for _, tile in ipairs(self.map.tilesSpare) do
+        if not tile.actor then
+            tile.is_open = true
         end
     end
 
-    self.queue:remove_actor(unit)
-    unit:remove()
-    
-    self:check_result()
+    -- Сохраняем врагов для возможного рекрутинга
+    self.defeatedEnemies = {}
+    for _, unit in ipairs(self.units) do
+        if not unit.is_player then
+            table.insert(self.defeatedEnemies, unit:convertToParty())
+        end
+    end
+
+    self.shards_gained = {}
+
+    -- Сброс UI
+    self.ui:reset()
 end
 
 function BattleState:leave()
-    self.resultLabel:deactivate()
-    self.resultButton:deactivate()
-
+    self.active = false
     self.map = nil
     self.pathfinder = nil
     self.queue = nil
-
     self.state = 'none'
     self.current_spell = nil
     self.action_type = nil
     self.action_complete = false
-
     self.result = nil
-
     self.rewards_h = 0
-    self.show_rewards_items = false
-
-    self.resultButton.y = self.rewards_y + 5
     self.rewards_tween = nil
     self.rewards_print_progress = 0
     self.rewards = {}
-
     self.grabbed_actor = nil
+    self.pressed_actor = nil
+    self.drag_started  = false
+    self.pressed_tile  = nil
+    self.defeatedEnemies = {}
+    self.shards_gained = {}
+    self.info_unit = nil
 end
 
-function BattleState:current_actor()
-    return self.queue.current
+function BattleState:isActive()
+    return self.active
 end
 
-function BattleState:current_action()
-    return self.actions[1]
+-- --- Основные методы (логика) ---
+
+function BattleState:startBattle()
+    self.state = 'battle'
+    RunState:fireHook('on_battle_start', self)
+    for _, tile in ipairs(self.map.tilesSpare) do
+        tile.is_open = false
+    end
+    self.log = {}
+    self:addLog('Battle begin!')
+    
+    if RunState:hasUnlock('extra_action_once_per_battle') then
+        self._extra_action_available = 1
+    end
+    self:start_turn()
 end
 
-function BattleState:add_action(action, pos)
-    pos = pos or #self.actions + 1
-    table.insert(self.actions, pos, action)
+function BattleState:add_object(object)
+    table.insert(self.objects, object)
+    table.sort(self.objects, function(a, b) return (a.y or 0) < (b.y or 0) end)
 end
 
-function BattleState:unit_death(unit)
+function BattleState:remove_object(object)
+    for i, v in ipairs(self.objects) do
+        if v == object then
+            table.remove(self.objects, i)
+            break
+        end
+    end
+end
+
+function BattleState:add_unit(character, is_player, tile, spare)
+    if not tile or tile.is_blocked then return false end
+
+    -- local character = type(table_or_name) == 'string'
+    --     and characterList[table_or_name]
+    --     or table_or_name
+
+    if is_player then
+        return self:_add_player_unit(character, tile, spare)
+    else
+        return self:_add_enemy_unit(character, tile)
+    end
+end
+
+function BattleState:_add_player_unit(character, tile, spare)
+    local unit = Unit(tile, true):setup(character, RunState:getModifiers())
+    unit.spare = spare or false
+    table.insert(self.units, unit)
+    if not spare then
+        self.queue:add_actor(unit)
+    end
+    self:add_object(unit)
+    return unit
+end
+
+function BattleState:_add_enemy_unit(character, tile)
+    local unit = Unit(tile, false):setup(character, {})
+    unit.spare = false
+    table.insert(self.units, unit)
+    self.queue:add_actor(unit)
+    self:add_object(unit)
+    return unit
+end
+
+function BattleState:remove_unit(unit)
+    for i, other in ipairs(self.units) do
+        if other == unit then
+            table.remove(self.units, i)
+            break
+        end
+    end
     self.queue:remove_actor(unit)
+    unit:remove()
+    self:remove_object(unit)
+
+    self:check_result()
+end
+
+function BattleState:unit_death(unit, killer)
+    self.queue:remove_actor(unit)
+
+    RunState:fireHook('on_enemy_killed', unit, killer, self)
 
     self:check_result()
 end
@@ -255,7 +327,7 @@ function BattleState:check_result()
     local is_win = true
     local is_lose = true
     for _, unit in ipairs(self.units) do
-        if not unit.is_dead then
+        if not unit.is_dead and not unit.spare then
             if unit.is_player then
                 is_lose = false
             else
@@ -263,7 +335,6 @@ function BattleState:check_result()
             end
         end
     end
-
     if is_win then
         self.result = 'win'
         self.state = 'result'
@@ -274,497 +345,680 @@ function BattleState:check_result()
     end
 end
 
+function BattleState:_calculateRewards()
+    local player = self.player
+    if not player then return end
+
+    -- ---------- 1. Золото ----------
+    local base_gold = 0
+    if self.type == 'trainer' then
+        base_gold = 30
+    end
+    if base_gold > 0 then
+        local _, gold_mul = RunState:getStat('gold_bonus')
+        if gold_mul <= 0 then gold_mul = 1 end
+        local gold = math.floor(base_gold * gold_mul)
+        player:addCurrency('gold', gold)
+        table.insert(self.rewards, {
+            type = 'currency', currency = 'gold', value = gold,
+        })
+    end
+
+    -- ---------- 2. Осколки за убитых врагов ----------
+    local shard_bonus = select(1, RunState:getStat('shard_bonus'))
+    local per_enemy   = 1 + shard_bonus
+
+    for _, unit in ipairs(self.units) do
+        if not unit.is_player and unit.is_dead then
+            local attr = unit.attribute
+            if attr then
+                player:addShard(attr, per_enemy)
+                self.shards_gained[attr] = (self.shards_gained[attr] or 0) + per_enemy
+            end
+        end
+    end
+
+    -- ---------- 3. Эссенция ----------
+    local essence_bonus = select(1, RunState:getStat('essence_bonus'))
+    local base_essence  = 1
+    local total_essence = base_essence + essence_bonus
+    self.essence_gained = total_essence
+    if total_essence > 0 then
+        player:addEssence(total_essence)
+    end
+
+    -- ---------- 4. Опыт ----------
+    self.exp_reward = 25 + 25 * self.level
+    player:addExperience(self.exp_reward)
+end
+
 function BattleState:showResult()
-	assert(self.result ~= 'win' or self.result ~= 'lose', "Wrong result!")
+    assert(self.result ~= 'win' or self.result ~= 'lose', "Wrong result!")
+
+    BattleMusic:stop()
+    for _, unit in ipairs(self.units) do
+        for _, effect in ipairs(unit.status_effects) do
+            effect:on_expire()
+        end
+    end
+    
     self.paused = true
-
+    local result
     if self.result == 'win' then
-        self.resultLabel.text = 'Victory!'
+        self:_calculateRewards()
+        RunState:fireHook('on_battle_win', self.player)
+        result = "Victory!"
+        VictoryMusic:play()
+    elseif self.result == 'lose' then
+        RunState:fireHook('on_battle_lose', self.player)
+        result = "Defeat..."
     end
-    if self.result == 'lose' then
-        self.resultLabel.text = 'Defeat...'
-    end
-
-    self.resultLabel:activate()
-    self.resultButton:activate()
+    self.ui:showResult(result)
 end
 
-function BattleState:set_target_mode(current_spell, actionType)
-    self.current_spell = current_spell
-    self.action_type = actionType or 'spell'
-    local actor = self:current_actor()
-
-    self.map:reset_nodes()
-    self.pathfinder:calculate_range2(actor.node, current_spell.range)
-
-    for _, t in pairs(self.map.tiles._props) do
-        t.can_be_selected = current_spell.filter(t) and t.range <= current_spell.range
-        t:change_color()
-    end
-
-    self.state = 'target'
-    self.panel:show_cancel_button(true)
+function BattleState:returnToLevelmap(color)
+    Gamestate.push(FadeInState, {
+        color = color,
+        time = 1,
+        onFadeComplete = function()
+            VictoryMusic:stop()
+            FieldMusic:play()
+            Levelmap.active = true
+            Gamestate.pop({ result = self.result, charactersToSelect = self.defeatedEnemies })
+            Gamestate.push(FadeOutState, { color = color, time = 1 })
+        end
+    })
 end
 
-function BattleState:cancel_target_mode()
-    self.current_spell = nil
-    self.map:reset_nodes()
+function BattleState:addLog(text)
+    table.insert(self.log, 1, text)
+end
 
-    if self.state == 'prepare' then
-        for _, tile in pairs(self.map.tiles._props) do
-            if tile.tx <= 2 then
-                if not tile.actor then
-                    tile.is_open = true
-                end
+-- --- Действия и ходы ---
+
+function BattleState:current_actor()
+    return self.queue.current
+end
+
+function BattleState:current_action()
+    return self.actions[1]
+end
+
+function BattleState:add_action(action, ...)
+    if type(action) == 'string' then
+        action = Actions[action](...)
+    end
+    table.insert(self.actions, action)
+end
+
+local function applyStatusEffects(actor)
+    for i, effect in ipairs(actor.status_effects) do
+        effect:on_tick()
+        if effect.duration and effect.duration > 0 then
+            effect.duration = effect.duration - 1
+        end
+        if effect.duration <= 0 then
+            actor:remove_status_effect(effect)
+        end
+    end
+end
+
+local function tickModifiers(unit)
+    for i = #unit.modifiers, 1, -1 do
+        local m = unit.modifiers[i]
+        local d = m.duration
+        if not d then goto continue end
+
+        -- тикаем только на ходах владельца
+        if d.tick_on == nil or d.tick_on == 'owner' then
+            if d.type == 'turn' then
+                d.value = d.value - 1
             end
-            tile:change_color()
         end
 
-        return
-    end
-
-    local actor = self:current_actor()
-    if not actor then return end
-    local node = actor.node
-    BattleState:open_attack_move(actor, node)
-end
-
-function BattleState:process_nodes(gscore, parents, actor, range)
-    range = range or 99
-    local is_melee = actor.attack_range == 1
-
-    for _, node in pairs(self.map.tiles._props) do
-        local score = gscore[node]
-
-        if not node.is_blocked then
-            if score > 0 and score <= range then
-                node.is_open = true
-            end
+        if d.value <= 0 then
+            unit:removeModifier(m)
         end
 
-        if not node.is_open and score <= range + 1 then
-            if is_melee and node.actor and actor:enemy_to(node.actor) then
-                node.can_be_selected = true
-            end
-            node.in_attack_range = true
-        end
-
-        node.parent = parents[node]
-        node:change_color()
+        ::continue::
     end
-end
-
-function BattleState:open_attack_move(actor, node)
-    self.map:reset_nodes()
-    self.state = 'waiting'
-
-    local gscore, parents = self.pathfinder:calculate(node)
-    self:process_nodes(gscore, parents, actor, actor.movement_range)
-
-    self.pathfinder:calculate_range(node, actor.attack_range)
-end
-
-function BattleState:recalculate_path(tile, range)
-    local actor = self:current_actor()
-    self.map:reset_nodes()
-
-    local gscore, parents = self.pathfinder:calculate(tile)
-    self:process_nodes(gscore, parents, actor, range)
-
-    self.pathfinder:calculate_range(tile, 1)
-
-    for i, t in ipairs(self.map.drawing_path) do
-        t.parent = i == 1 and actor.node or self.map.drawing_path[i-1]
-    end
-    actor.node.parent = nil
 end
 
 function BattleState:start_turn()
+    self._extra_action_pending = false
     self.queue:start_turn()
-    
+    self.phase = 'start_turn'
     local actor = self:current_actor()
+    if not actor then return end
+
+    applyStatusEffects(actor)
+
+    tickModifiers(actor)
+
+    if actor.is_dead then
+        if self.state == 'result' then
+            self:showResult()
+        end
+        return
+    end
 
     for _, spell in ipairs(actor.spells) do
         if spell.current_cooldown and spell.current_cooldown > 0 then
             spell.current_cooldown = spell.current_cooldown - 1
         end
     end
+end
 
-    local node = actor.node
-    if actor.is_player == true then
-        BattleState:open_attack_move(actor, node)
-        self.panel:start_turn(actor)
-        self.inventory:enable()
-    else
-        self.state = 'ai'
-        local gscore, parents = self.pathfinder:calculate(node)
-        self:process_nodes(gscore, parents, actor)
+function BattleState:useExtraAction()
+    if self.state ~= 'battle' then return end
+    if self.phase ~= 'idle' then return end
+    if self._extra_action_available <= 0 then return end
 
-        local path_to_target
-        local target
-        local cost = 1/0
-        for _, u in ipairs(self.units) do
-            if u.is_player and not u.is_dead then
-                local p = u.node:get_path()
-                if cost > #p then
-                    cost = #p
-                    path_to_target = p
-                    target = u.node
-                end
-            end
-        end
+    local actor = self:current_actor()
+    if not actor or not actor.is_player then return end
 
-        if target then
-            self.pathfinder:calculate_range(target, actor.attack_range)
-    
-            if node.range <= actor.attack_range then
-                target:set_animation('select', nil , { 1, 0, 0, 1 })
-                -- actor:set_current_action(attack, target.actor)
-                self:add_action(attack(actor, target.actor))
-            else
-                
-                local path_to_closest = path_to_target
-                local closest_node = target
-                cost = 1/0
-                -- find closest node that enemy can attack from
-                for _, n in pairs(self.map.tiles._props) do
-                    if n.range == actor.attack_range then
-                        local p = n:get_path()
-                        if cost > #p or n == target.parent then
-                            cost = #p
-                            path_to_closest = p
-                            closest_node = n
-                        end
-                    end
-                end
+    self._extra_action_available = 0
+    self._extra_action_pending   = true
 
-                if path_to_closest and cost > 0 then
-                    local n = math.min(#path_to_closest, actor.movement_range)
-                    closest_node = path_to_closest[n]
-                end
-
-                local do_attack = closest_node.range == 1 and actor.attack_range == 1
-        
-                if closest_node then
-                    if do_attack then
-                        target:show_path()
-                        target:set_animation('select', nil , { 1, 0, 0, 1 })
-                    else
-                        closest_node:show_path()
-                    end
-                    -- actor:set_current_action(move, closest_node:get_path(), self.pathfinder, do_attack and target.actor or false)
-                    self:add_action(move(actor, closest_node:get_path(), self.pathfinder, do_attack and target.actor or false))
-                else
-                    -- actor:set_current_action(ai_wait)
-                    self:add_action(ai_wait(actor))
-                end
-            end
-        else
-            -- actor:set_current_action(ai_wait)
-            self:add_action(ai_wait(actor))
-        end
-        self.map:reset_nodes()
-    end
+    self:addLog(actor.name .. ' takes an extra action!')
+    PlaySound(ButtonClickSound)
 end
 
 function BattleState:handle_action(dt)
-    local complete = false
-    local currentAction = self:current_action()
-
-    if currentAction then
-        if currentAction.is_new then
-            self.map:reset_nodes()
-            self.panel:disable()
+    local actor = self:current_actor()
+    for i, action in ipairs(self.actions) do
+        if action.is_new then
+            self.map:reset_tiles()
             self.inventory:disable()
-
-            currentAction:start()
-            currentAction.is_new = false
+            action:start()
+            action.is_new = false
+            if self.phase ~= 'start_turn' then
+                self.phase = 'action'
+            end
         end
-
-        complete = currentAction:update(dt)
-    else
-        if self.action_complete then
-            -- if self.complete_delay <= 0 then
-                self:start_turn()
-            -- else
-            --     self.complete_delay = self.complete_delay - dt
-            --     return
-            -- end
+        local complete = action:update(dt)
+        if complete then
+            table.remove(self.actions, i)
+            if action.name == 'Item' then
+                self.nextPhase = 'start_turn'
+            end
         end
     end
 
-    if complete then
-        table.remove(self.actions, 1)
-        self.panel:end_turn()
-        
+    if #self.actions == 0 then
         if self.state == 'result' then
             self:showResult()
+            return
+        end
+        if self.nextPhase then
+            self.phase = self.nextPhase
+            self.nextPhase = nil
+        end
+        if self.phase == 'action' then
+            if self._extra_action_pending then
+                self._extra_action_pending = false
+                self.queue:restart_turn()
+                self.phase = 'start_turn'
+            else
+                self:start_turn()
+            end
+        elseif self.phase == 'start_turn' then
+            self.phase = 'idle'
+            if actor and actor.is_player then
+                self:recalculate_path()
+                self.inventory:enable()
+            elseif actor then
+                AI.think(self, actor)
+            end
+        end
+    end
+end
+
+-- --- Целеуказание и пути ---
+
+function BattleState:set_target_mode(current_spell, actionType)
+    self.current_spell = current_spell
+    self.action_type = actionType or 'spell'
+    local actor = self:current_actor()
+    self.map:reset_tiles()
+    self.pathfinder:calculate_range2(actor.tile, current_spell.range)
+    for _, t in pairs(self.map.tiles._props) do
+        t.can_be_selected = current_spell.filter(t, actor) and t.range <= current_spell.range
+        t:change_color()
+    end
+    self.target_mode = 'targeting'
+    self.panel:show_cancel_button(true)
+end
+
+function BattleState:cancel_target_mode()
+    self.current_spell = nil
+    self.map:reset_tiles()
+    self.target_mode = 'none'
+    self.panel:show_cancel_button(false)
+    if self.state == 'prepare' then
+        for _, tile in pairs(self.map.tiles._props) do
+            if tile.tx <= 2 and not tile.actor then
+                tile.is_open = true
+            end
+            tile:change_color()
+        end
+        return
+    end
+    self:recalculate_path()
+end
+
+function BattleState:process_tiles(gscore, parents, actor, range)
+    range = range or 99
+    local is_melee = actor.attack_range == 1
+    for _, tile in pairs(self.map.tiles._props) do
+        local score = gscore[tile] or 0
+        if not tile.is_blocked then
+            if score > 0 and score <= range then
+                tile.is_open = true
+            end
+        end
+        if not tile.is_open and score <= range + 1 then
+            if is_melee and tile.actor and actor:enemy_to(tile.actor) then
+                tile.can_be_selected = true
+            end
+            tile.in_attack_range = true
+        end
+        tile.parent = parents[tile]
+        tile:change_color()
+    end
+end
+
+function BattleState:recalculate_path(tile, range)
+    local actor = self:current_actor()
+    if not actor then return end
+    tile = tile or actor.tile
+    range = range or actor.move_range
+    self.map:reset_tiles()
+    local gscore, parents = self.pathfinder:calculate(tile)
+    self:process_tiles(gscore, parents, actor, range)
+    if self.target_mode == 'drawing_path' then
+        self.pathfinder:calculate_range(tile, 1)
+        for i, t in ipairs(self.map.drawing_path) do
+            t.parent = i == 1 and actor.tile or self.map.drawing_path[i-1]
+        end
+    else
+        self.pathfinder:calculate_range(tile, actor.attack_range)
+    end
+    actor.tile.parent = nil
+end
+
+function BattleState:spawn_random_trap()
+    
+end
+
+-- --- Боевая фаза: drag-путь + попап характеристик ---
+
+-- ЛКМ вниз в бою. Только запоминаем тайл, ничего не начинаем.
+function BattleState:battlePress(tile)
+    if self.state ~= 'battle' then return end
+    if self.phase ~= 'idle' then return end
+    if self.target_mode ~= 'none' then return end
+    if not tile then return end
+
+    self.pressed_tile = tile
+    self.pressed_x, self.pressed_y = love.mouse.getPosition()
+    self.drag_started = false
+end
+
+-- Движение мыши. Как только порог пройден — стартуем путь.
+function BattleState:battleMove(x, y, dx, dy)
+    if self.state ~= 'battle' then return end
+    if self.drag_started then return end
+    if not self.pressed_tile then return end
+    if self.target_mode ~= 'none' then return end
+
+    local actor = self:current_actor()
+    local t = self.pressed_tile
+
+    -- Путь рисуем только от актора или из открытого тайла
+    if not (t.actor == actor or t.is_open) then return end
+
+    local mx, my = love.mouse.getPosition()
+    local dist = math.sqrt((mx - self.pressed_x)^2 + (my - self.pressed_y)^2)
+    if dist >= self.drag_threshold then
+        self.drag_started = true
+        self.map:start_drawing_path(t)
+    end
+end
+
+-- ЛКМ вверх в бою: либо завершаем drag-путь, либо toggle попапа.
+function BattleState:battleRelease()
+    if self.state ~= 'battle' then return end
+
+    if self.target_mode == 'drawing_path' then
+        -- Завершение drag-пути
+        self:hideUnitInfo()
+
+        local path = self.map.drawing_path
+        if next(path) then
+            self.target_mode = 'none'
+            local actor = self:current_actor()
+            local target = self.map.last_tile and self.map.last_tile.actor
+            self:add_action(move(actor, path, self.pathfinder, target))
+        else
+            self.map:stop_drawing_path()
         end
 
-        -- self.complete_delay = 0.5
+    elseif self.pressed_tile and not self.drag_started then
+        -- Одиночный клик: открыть/переключить/закрыть попап
+        local unit = self.pressed_tile.actor
+        if unit then
+            if self.info_unit == unit then
+                self:hideUnitInfo()
+            else
+                self:showUnitInfo(unit)
+            end
+        else
+            self:hideUnitInfo()
+        end
     end
-    self.action_complete = complete
+
+    self.pressed_tile = nil
+    self.drag_started = false
 end
+
+-- --- Подготовительная фаза (захват юнитов) ---
+
+-- Вызывается из BattleInput:mousepressed (ЛКМ), только в фазе prepare.
+-- НЕ начинает drag — только запоминает потенциальный источник.
+function BattleState:preparePress(tile)
+    if self.state ~= 'prepare' then return end
+    if self.grabbed_actor then return end
+    if not tile then return end
+    if not (tile.actor and tile.actor.is_player) then return end
+
+    self.pressed_actor = tile.actor
+    self.pressed_x, self.pressed_y = love.mouse.getPosition()
+    self.drag_started = false
+end
+
+-- Вызывается из BattleInput:mousemoved.
+-- Как только курсор ушёл дальше порога — стартуем drag.
+function BattleState:prepareMove(x, y, dx, dy)
+    if self.state ~= 'prepare' then return end
+    if self.drag_started then return end
+    if not self.pressed_actor then return end
+
+    local mx, my = love.mouse.getPosition()
+    local dist = math.sqrt((mx - self.pressed_x)^2 + (my - self.pressed_y)^2)
+    if dist >= self.drag_threshold then
+        self.drag_started = true
+        self.grabbed_actor = self.pressed_actor
+        self.player:removeCharacter(self.pressed_actor.character)
+        PlaySound(ButtonClickSound)
+    end
+end
+
+-- Вызывается из BattleInput:mousereleased (ЛКМ) в фазе prepare.
+function BattleState:prepareRelease(tile)
+    if self.state ~= 'prepare' then return end
+
+    if self.drag_started and self.grabbed_actor then
+        -- Завершение drag-переноса
+        self:dropActor(tile)
+        self.grabbed_actor = nil
+        self.map.highlighted = nil
+        self:hideUnitInfo()
+
+    elseif self.pressed_actor then
+        -- Одиночный клик: toggle попапа
+        if self.info_unit == self.pressed_actor then
+            self:hideUnitInfo()
+        else
+            self:showUnitInfo(self.pressed_actor)
+        end
+    else
+        -- Клик по пустому месту — закрыть попап
+        self:hideUnitInfo()
+    end
+
+    self.pressed_actor = nil
+    self.drag_started = false
+end
+
+-- Логика «положить в тайл / поменять местами / вернуть обратно».
+-- tile может быть nil, если отпустили вне карты.
+function BattleState:dropActor(tile)
+    local actor = self.grabbed_actor
+    if not actor then return end
+
+    -- Некуда класть — вернуть на исходный тайл.
+    if not tile then
+        self:setActorToTile(actor, actor.tile)
+        return
+    end
+
+    local same_tile   = (tile == actor.tile)
+    local is_place    = tile.is_open or same_tile
+    local is_swap     = tile.actor and tile.actor.is_player and tile.actor ~= actor
+
+    if not is_place and not is_swap then
+        -- Невалидная цель — вернуть на исходный тайл.
+        self:setActorToTile(actor, actor.tile)
+        return
+    end
+
+    if is_place then
+        -- Проверяем лимиты по слотам.
+        if tile.spare then
+            if self.player:getLen('spare') >= self.player.charactersSpareSize then
+                self:setActorToTile(actor, actor.tile)
+                return
+            end
+        else
+            if self.player:getLen('active') >= self.player.charactersActiveSize then
+                self:setActorToTile(actor, actor.tile)
+                return
+            end
+        end
+
+        actor.tile.is_open = true
+        actor.tile:change_color()
+        self:setActorToTile(actor, tile)
+        PlaySound(ButtonClickSound)
+    elseif is_swap then
+        local tile_actor   = tile.actor
+        local grabbed_tile = actor.tile
+        self.player:removeCharacter(tile_actor.character)
+        self:setActorToTile(actor, tile)
+        self:setActorToTile(tile_actor, grabbed_tile)
+        tile_actor.show_name = false
+        PlaySound(ButtonClickSound)
+    end
+end
+
+-- Окно характеристик юнита (ЛКМ)
+function BattleState:showUnitInfo(unit)
+    if not unit then return end
+    self.info_unit = unit
+end
+
+function BattleState:hideUnitInfo()
+    self.info_unit = nil
+end
+
+-- Хук на одиночный клик по юниту в фазе подготовки.
+function BattleState:onPrepareUnitClick(actor)
+    self:showUnitInfo(actor)
+end
+
+-- Отмена drag (например, по Escape) — вернуть юнита на исходный тайл.
+function BattleState:cancelPrepareDrag()
+    if self.grabbed_actor then
+        self:setActorToTile(self.grabbed_actor, self.grabbed_actor.tile)
+        self.grabbed_actor = nil
+        self.map.highlighted = nil
+    end
+    self.pressed_actor = nil
+    self.drag_started  = false
+end
+
+function BattleState:grabActor(tile)
+    if not tile then return end
+    if self.grabbed_actor then
+        if tile.is_open or tile == self.grabbed_actor.tile then
+            if tile.spare then
+                if self.player:getLen('spare') >= self.player.charactersSpareSize then return end
+            else
+                if self.player:getLen('active') >= self.player.charactersActiveSize then return end
+            end
+            self.grabbed_actor.tile.is_open = true
+            self.grabbed_actor.tile:change_color()
+            self:setActorToTile(self.grabbed_actor, tile)
+            self.grabbed_actor = nil
+            self.map.highlighted = nil
+            PlaySound(ButtonClickSound)
+        elseif tile.actor and tile.actor.is_player then
+            local tile_actor = tile.actor
+            local grabbed_tile = self.grabbed_actor.tile
+            self.player:removeCharacter(tile_actor.character)
+            self:setActorToTile(self.grabbed_actor, tile)
+            self:setActorToTile(tile_actor, grabbed_tile)
+            tile_actor.show_name = false
+            self.grabbed_actor = nil
+            self.map.highlighted = nil
+            PlaySound(ButtonClickSound)
+        end
+    elseif tile.actor and tile.actor.is_player then
+        self.grabbed_actor = tile.actor
+        self.player:removeCharacter(tile.actor.character)
+        PlaySound(ButtonClickSound)
+    end
+end
+
+function BattleState:setActorToTile(actor, tile)
+    local old_tile = actor.tile
+    actor:set_tile(tile)
+    actor.x = tile.x
+    actor.y = tile.y + UNIT_ALIVE_OFFSET
+    actor.character.prepare_x = tile.tx
+    actor.character.prepare_y = tile.ty
+    tile.is_open = false
+    if not tile.spare then
+        if not self.queue:actor_exists(actor) then
+            self.queue:add_actor(actor)
+        end
+        self.player:addCharacterTo(actor.character, 'active')
+    else
+        self.queue:remove_actor(actor)
+        self.player:addCharacterTo(actor.character, 'spare')
+    end
+    actor.spare = tile.spare
+end
+
+-- --- Основные циклы ---
 
 function BattleState:update(dt)
     self.queue:update(dt)
-
     if not self.paused then
         self:handle_action(dt)
     end
 
     self.map:update(dt)
-
-    local actor = self.map.highlighted and self.map.highlighted.actor or nil
-    table.sort(self.units, function (a, b)
-        if a == actor then return false end
-        if b == actor then return true end
-        return a.y < b.y
-    end)
-    for i, unit in ipairs(self.units) do
-        unit:update(dt)
+    table.sort(self.objects, function(a, b) return a.y < b.y end)
+    for i, object in ipairs(self.objects) do
+        object:update(dt)
+        if object.toRemove then
+            table.remove(self.objects, i)
+        end
     end
-    self.u:update(dt)
     self.inventory:update(dt)
+    self.panel:update(dt)
 
-    if self.state == 'rewards' then
-        local complete = false
-        if self.rewards_tween then
-            complete = self.rewards_tween:update(dt)
-            self.resultButton.y = self.rewards_y + self.rewards_h + 10
-        end
-
-        if complete then
-            self.show_rewards_items = true
-            self.rewards_print_progress = self.rewards_print_progress + dt * 2
-        end
-    end
-
+    -- Подготовительная фаза (только UI)
     if self.state == 'prepare' then
+        self.ui:updatePrepare(dt)
+        
         if self.grabbed_actor then
             self.grabbed_actor.x, self.grabbed_actor.y = love.mouse.getPosition()
         end
     end
+
+    -- Результат и награды
+    if self.state == 'result' or self.state == 'rewards' then
+        self.ui:updateResult(dt)
+    end
+    
+    self.ui:updateExtraActionButton(self)
+
+    -- Тряска
+    local speed = 7
+    self.shaking = math.lerp(self.shaking, 0, speed * dt)
 end
 
 function BattleState:draw()
+    love.graphics.push()
+    love.graphics.translate((math.random() - 0.5) * self.shaking, (math.random() - 0.5) * self.shaking / 2)
+
     local size = 1.3
-    local window_width = love.graphics.getWidth()
     local sprite_width = self.background.w * size
-    self.background:draw(_, window_width / 2 - sprite_width / 2, -260, 0, size, 1)
+    self.background:draw(_, love.graphics.getWidth() / 2 - sprite_width / 2, -260, 0, size, 1)
 
     self.map:draw()
-
-    for _, unit in ipairs(self.units) do
-        if unit.is_dead then
-            unit:draw()
-        end
+    for _, object in ipairs(self.objects) do
+        object:draw()
     end
-
-    love.graphics.setLineWidth(1)
-    for _, unit in ipairs(self.units) do
-        if not unit.is_dead then
-            unit:draw()
-            unit:draw_health(unit.x, unit.y)
-        end
-    end
-
-    local actor = self:current_actor()
-    if actor then
-        local x = self.panel.cancelButton.x
-        local y = self.panel.cancelButton.y - energyFont:getHeight() - 6
-        local text = 'Energy: ' .. tostring(actor.energy) .. '/' .. tostring(actor.max_energy)
-        love.graphics.setFont(energyFont)
-        love.graphics.setColor(0, 0, 0, 1)
-        PrintText(text, x + 1, y + 1)
-        love.graphics.setColor(1, 1, 1, 1)
-        PrintText(text, x, y)
-    end
-
     local current_action = self:current_action()
     if current_action then
         current_action:draw()
     end
-    
-    -- love.graphics.setLineWidth(1)
-    -- for _, unit in ipairs(self.units) do
-    --     unit:draw_health(unit.node.x, unit.node.y)
-    --     unit:draw_name()
-    -- end
-    self.u:draw()
+    love.graphics.pop()
+
+    -- UI (лог, награды, инвентарь, очередь)
     self.queue:draw()
     self.inventory:draw()
+    self.ui:draw(self)   -- передаём self для доступа к данным
 
+    -- Отображение текущего заклинания
     if self.current_spell then
         local w, h = self.inventory.w, self.inventory.h
         local x, y = self.inventory.x + w + 10, self.inventory.y
-
         local text = 'Casting: ' .. self.current_spell.name
         local textW = font:getWidth(text)
         local textH = font:getHeight(text)
-
         local padding = 4
-
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.rectangle('fill', x, y, textW + padding + padding, textH + padding + padding)
-        
+        love.graphics.rectangle('fill', x, y, textW + padding * 2, textH + padding * 2)
         love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.rectangle('line', x, y, textW + padding + padding, textH + padding + padding)
-
+        love.graphics.rectangle('line', x, y, textW + padding * 2, textH + padding * 2)
         love.graphics.setFont(font)
         PrintText(text, x + padding, y + padding)
     end
 
-    if self.state == 'rewards' then
-        local x, y = self.rewards_x, self.rewards_y
-        local w, h = self.rewards_w, self.rewards_h
-
-        love.graphics.setColor(0.3, 0.34, 0.5, 1)
-        love.graphics.rectangle('fill', x, y, w, h)
-
-        if self.show_rewards_items then
-            love.graphics.setFont(rewardsFont)
-            love.graphics.setColor(1, 1, 1, 1)
-            for index, reward in ipairs(self.rewards) do
-                local i = index - 1
-                local font_h = rewardsFont:getHeight()
-                local offset = i * font_h + i * 4
-                local str = tostring(reward.value) .. ' ' .. reward.currency
-                PrintText(Badprint(str, self.rewards_print_progress), x + 8, y + 8 + offset)
-            end
-        end
-        
-        -- x = x + w + 10
-        -- love.graphics.setColor(0.3, 0.34, 0.5, 1)
-        -- love.graphics.rectangle('fill', x, y, w, h)
-    end
-
-    if self.state == 'prepare' then
-        local text = 'Prepare stage'
-        local w = stageFont:getWidth(text)
-        love.graphics.setFont(stageFont)
-        love.graphics.setColor(0, 0, 0, 1)
-        PrintText(text, love.graphics.getWidth()/2 - w/2 + 3, 70 + 3)
-        love.graphics.setColor(1, 1, 1, 1)
-        PrintText(text, love.graphics.getWidth()/2 - w/2, 70)
-    end
+    love.graphics.print(self.phase, 0, 0)
 end
 
+-- --- Обработка ввода (делегируется) ---
+
 function BattleState:mousepressed(x, y, button)
-    local actor = self:current_actor()
-    if button == 1 then
-        local tile = self.map.highlighted
-        if self.state == 'waiting' then
-            if tile and (tile.actor == actor or tile.is_open) then
-                self.map:start_drawing_path(tile)
-            end
-        end
-
-        if self.state == 'target' then
-            if tile and tile.can_be_selected then
-                self.state = 'acting'
-                local a = self.action_type == 'item' and self.player or actor
-                local action = Actions[self.action_type](a, self.current_spell, tile)
-                if not action.is_aborted then
-                    self:add_action(action)
-                    self.panel:show_cancel_button(false)
-                    self.current_spell = nil
-                else
-                    Tagtext:add('Not enough energy!', a.x - 25, a.y - 40, 2, 30, { 1, 1, 1 })
-                    self:cancel_target_mode()
-                    self.panel:show_cancel_button(false)
-                end
-            end
-        end
-
-        if self.state == 'prepare' then
-            if self.grabbed_actor then
-                if tile and tile.is_open then
-                    self.grabbed_actor.node.is_open = true
-                    self.grabbed_actor.node:change_color()
-
-                    self.grabbed_actor:set_node(tile)
-                    self.grabbed_actor.x = tile.x
-                    self.grabbed_actor.y = tile.y
-                    self.grabbed_actor.show_name = true
-                    self.grabbed_actor.panel.highlighted = true
-
-                    self.grabbed_actor.character.prepare_x = tile.tx
-                    self.grabbed_actor.character.prepare_y = tile.ty
-
-                    self.grabbed_actor = nil
-                    tile.is_open = false
-
-                    self.map.highlighted = nil
-                end
-            elseif tile and tile.actor and tile.actor.is_player then
-                self.grabbed_actor = tile.actor
-            end
-        end
-    end
-
-    if button == 2 then
-        if --[[ actor.is_player and ]] self.state == 'waiting' then
-            local tile = self.map.highlighted
-            if tile then
-                if tile.is_open then
-                    self.state = 'acting'
-                    self:add_action(move(actor, tile:get_path(), self.pathfinder))
-                elseif tile.can_be_selected then
-                    self.state = 'acting'
-                    if actor.attack_range == 1 and tile.range > 1 then
-                        self:add_action(move(actor, tile.parent:get_path(), self.pathfinder, tile.actor))
-                    else
-                        self:add_action(attack(actor, tile.actor))
-                    end
-                end
-            end
-        end
-        if self.state == 'drawing_path' then
-            self.map:stop_drawing_path()
-        end
-
-        if self.state == 'prepare' then
-            if self.grabbed_actor then
-                self.grabbed_actor.x = self.grabbed_actor.node.x
-                self.grabbed_actor.y = self.grabbed_actor.node.y
-                self.grabbed_actor = nil
-            end
-        end
-    end
-    self.inventory:mousepressed(x, y)
-    self.u:pressed(x, y, button)
+    self.input:mousepressed(x, y, button)
 end
 
 function BattleState:mousereleased(x, y, button)
-    if self.state == 'drawing_path' then
-        local path = self.map.drawing_path
-        if next(path) then
-            self.state = 'acting'
-            local actor = self:current_actor()
-            self:add_action(move(actor, path, self.pathfinder, self.map.last_tile.actor))
-        else
-            self.map:stop_drawing_path()
-        end
-    end
-    self.u:released(x, y)
+    self.input:mousereleased(x, y, button)
+end
+
+function BattleState:mousemoved(x, y, dx, dy)
+    self.input:mousemoved(x, y, dx, dy)
 end
 
 function BattleState:keypressed(key, scancode, isrepeat)
-    self.u:keypressed(key, scancode, isrepeat)
     if key == 'escape' then
-        if self.state == 'target' then
-            self:cancel_target_mode()
-            self.panel:show_cancel_button(false)
+        if self.info_unit then
+            self:hideUnitInfo()
+            return
         end
-        if self.state == 'drawing_path' then
-            self.map:stop_drawing_path()
+        if self.state == 'prepare' and self.drag_started then
+            self:cancelPrepareDrag()
+            return
         end
     end
+    self.input:keypressed(key, scancode, isrepeat)
 end
-
-function BattleState:mousemoved(x, y, dx, dy) self.u:moved(x, y, dx, dy) end
-function BattleState:textinput(text) self.u:textinput(text) end
-function BattleState:wheelmoved(x, y) self.u:wheelmoved(x, y) end
 
 return BattleState

@@ -16,8 +16,14 @@ end
 function Particles:update(dt)
     for i, p in ipairs(self.particles) do
         p.system:update(dt)
-        if p.toRemove and p.system:getCount() == 0 then
-            table.remove(self.particles, i)
+        if p.toRemove then
+            if not p.system:isPaused() then
+                p.system:pause()
+            end
+
+            if p.system:getCount() == 0 then
+                table.remove(self.particles, i)
+            end
         end
     end
 end
@@ -27,6 +33,7 @@ function Particles:draw()
     for i, p in ipairs(self.particles) do
         love.graphics.draw(p.system)
     end
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 return Particles

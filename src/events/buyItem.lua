@@ -1,50 +1,82 @@
+local Items    = require 'src.items'
+local RunState = require 'src.states.run_state'
 
-local Items = require 'src.items'
-local itemTable = {
-    { name = 'healPotion', chance = 0.5, minQuantity = 1, maxQuantity = 3, costPerItem = '20' },
-    { name = 'powerup', chance = 0.5, minQuantity = 1, maxQuantity = 2, costPerItem = '30' },
+local OFFERS = {
+    { name = 'healPotion',   costPer = 20 },
+    { name = 'energyPotion', costPer = 15 },
+    { name = 'powerup',      costPer = 40 },
 }
 
-return function (player)
-    local t = itemTable[math.random(#itemTable)]
-    local item = Items[t.name]
-    local quantity = math.random(t.minQuantity, t.maxQuantity)
-    local cost = quantity * t.costPerItem
-    
-    return {
-        [1] = {
-            text = 'You meet a person, who offers you ' .. quantity .. ' of ' .. item.name .. ' for ' .. cost .. ' gold.\nWill you accept an offer?',
-            buttons = {
-                { text = 'Yes', action = function ()
-                    if player.currencies.gold < cost then
-                        return 4
-                    end
+local function filtered()
+    local out = {}
+    for _, entry in ipairs(OFFERS) do
+        if Items[entry.name] then
+            table.insert(out, entry)
+        end
+    end
+    return out
+end
 
-                    player:addItem(t.name, quantity)
-                    player:addCurrency('gold', -cost)
-                    PlaySound(CoinsSound)
-                    return 2
-                end },
-                { text = 'No', action = function () return 3 end }
+return function(player)
+    local offers = filtered()
+    if #offers == 0 then
+        return {
+            title = "Traveling Merchant",
+            steps = {
+                [1] = {
+                    text = "A merchant passes by, but has nothing you need.",
+                    buttons = { { text = "Continue", action = function() return 0 end } },
+                }
             }
-        },
-        [2] = {
-            text = 'You bought ' .. quantity .. ' of ' .. item.name .. ' for ' .. cost .. ' gold.',
-            buttons = {
-                { text = 'Exit', action = function () return 0 end }
-            }
-        },
-        [3] = {
-            text = 'You leave without taking items.',
-            buttons = {
-                { text = 'Exit', action = function () return 0 end }
-            }
-        },
-        [4] = {
-            text = 'You don\'t have enough gold to afford it.',
-            buttons = {
-                { text = 'Exit', action = function () return 0 end }
-            }
+        }
+    end
+
+    local offer    = offers[RunState:randomInt(1, #offers)]
+    local item     = Items[offer.name]
+    local quantity = RunState:randomInt(1, 2)
+    local cost     = quantity * offer.costPer
+
+    return {
+        title = "Traveling Merchant",
+        steps = {
+            [1] = {
+                text = string.format(
+                    "A traveler offers %d × %s for %d gold.\n\nWill you accept?",
+                    quantity, item.name, cost),
+                buttons = {
+                    { text = "Accept offer", action = function()
+                        local gold = player.currencies.gold or 0
+                        if gold < cost then
+                            return 4
+                        end
+                        player:addItem(offer.name, quantity)
+                        player:addCurrency('gold', -cost)
+                        PlaySound(CoinsSound)
+                        return 2
+                    end },
+                    { text = "Decline", action = function() return 3 end },
+                }
+            },
+            [2] = {
+                text = function()
+                    return string.format(
+                        "You bought %d × %s for %d gold.",
+                        quantity, item.name, cost)
+                end,
+                buttons = { { text = "Continue", action = function() return 0 end } },
+            },
+            [3] = {
+                text = "You decline the offer and walk away.",
+                buttons = { { text = "Continue", action = function() return 0 end } },
+            },
+            [4] = {
+                text = function()
+                    return string.format(
+                        "You reach for your coin purse but find only %d gold — not enough for %d.",
+                        player.currencies.gold or 0, cost)
+                end,
+                buttons = { { text = "Continue", action = function() return 0 end } },
+            },
         }
     }
 end
