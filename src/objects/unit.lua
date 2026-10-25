@@ -15,6 +15,7 @@ text_effect.boxblur.radius = 1
 UNIT_ALIVE_OFFSET = -HEX_RADIUS * 0.45
 UNIT_DEAD_OFFSET = HEX_RADIUS * 0.3
 
+--- @class Unit
 local Unit = Class{}
 
 -- ------------------------------------------------------------------
@@ -273,7 +274,7 @@ end
 function Unit:take_damage(source, damage, is_attack, element)
     if self.is_dead then return 0 end
 
-    local final_damage = damageCalculator.calculate(source, self, damage, element)
+    local final_damage = damageCalculator.calculate(source, self, damage, element, { is_attack = is_attack })
 
     -- Визуальные эффекты
     Tagtext:add('-' .. final_damage, self.x + 5, self.y - 40, 2, 30, { 1, 0, 0 })

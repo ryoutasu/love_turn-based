@@ -1,4 +1,5 @@
 local sprite = require 'src.sprite'
+local RunState = require 'src.states.run_state'
 
 local offset = 75
 
@@ -104,10 +105,47 @@ function Node:init(id, x, y, isOpen, type)
     if type == 'wild' or type == 'trainer' then
         self.enemies_count = math.random(2, 3)
     end
+    
+    self.story_id         = nil   -- scene graph id (e.g. 'crossroads')
+    self.story_scene      = nil   -- scene module id (e.g. 'master_boss')
+    self.requires         = nil   -- { unlock=… } | { run_key=… } | { story_key=… }
+    self.locked_hint      = nil   -- diegetic string shown on blocked click
+    self.alt_when_locked  = nil   -- fallback scene id, or nil (hard block)
+    self.is_boss          = false -- hint for rendering / layout
+    self.is_master_boss   = false -- triggers a BattleState after EventState
+    self.grants           = nil   -- { run_key=…, story_key=… } (filled by thread)
+    self._active_scene_id = nil   -- which scene actually ran (alt-aware)
 end
 
 function Node:getGamestate()
     return node_gamestates[self.type]
+end
+
+-- True if this node cannot currently be entered due to its `requires` gate.
+function Node:isLocked(player)
+    if not self.requires then return false end
+    local r = self.requires
+    if r.unlock then
+        return not RunState:hasUnlock(r.unlock)
+    end
+    if r.run_key then
+        return not RunState:hasUnlock(r.run_key)
+    end
+    if r.story_key then
+        local meta = player and player.meta_story
+        return not (meta and meta.persistent_keys[r.story_key])
+    end
+    return false
+end
+
+-- Resolve which scene id to play at this node.
+-- Returns nil for non-story nodes, or for story nodes hard-blocked by a gate.
+function Node:resolve_scene_id(player)
+    if not self.story_scene then return nil end
+    if self:isLocked(player) then
+        return self.alt_when_locked   -- nil if no fallback (hard block)
+    end
+    return self.story_scene
 end
 
 function Node:update(dt)

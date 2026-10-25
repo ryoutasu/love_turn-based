@@ -58,4 +58,12 @@ Chart.elements = {
     }
 }
 
+function Chart.getAttributeMultiplier(attAttr, defAttr)
+    return Chart.attributes[attAttr][defAttr] or 1
+end
+
+function Chart.getElementMultiplier(attElem, defElem)
+    return Chart.elements[attElem][defElem] or 1
+end
+
 return Chart
