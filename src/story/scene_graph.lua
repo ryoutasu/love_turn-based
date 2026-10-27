@@ -4,7 +4,15 @@
 local SceneGraph = {}
 
 -- Outgoing scene ids from a scene node definition.
--- Recognised fields: .next (string), .branches (array of strings).
+-- Recognised fields:
+--   .next            (string)          linear next scene
+--   .branches        (array)           player choice
+--   .alt_when_locked (string)          fallback when the node's `requires`
+--                                      gate is closed (see Node:resolve_scene_id)
+--
+-- `alt_when_locked` MUST be followed here: it is a real edge the player can
+-- take, so leaving it out makes the target look unreachable and
+-- SceneGraph.validate() rejects a perfectly valid story graph.
 function SceneGraph.outgoing(node)
     local out = {}
     if node.next then out[#out + 1] = node.next end
@@ -13,6 +21,7 @@ function SceneGraph.outgoing(node)
             out[#out + 1] = node.branches[i]
         end
     end
+    if node.alt_when_locked then out[#out + 1] = node.alt_when_locked end
     return out
 end
 

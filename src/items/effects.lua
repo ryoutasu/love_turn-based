@@ -25,7 +25,7 @@ function Effects.restore_hp(effect, item, subject, context)
     if context == 'unit' then
         subject:change_health(amount)
     elseif context == 'character' then
-        local stats  = Stats.new(subject, RunState:getModifiers(), {})
+        local stats  = Stats(subject, RunState:getModifiers(), {})
         local max_hp = stats:get('max_health')
         subject.health = math.min(subject.health + amount, max_hp)
     end
@@ -38,7 +38,7 @@ function Effects.restore_energy(effect, item, subject, context)
     if context == 'unit' then
         subject:change_energy(amount)
     elseif context == 'character' then
-        local stats  = Stats.new(subject, RunState:getModifiers(), {})
+        local stats  = Stats(subject, RunState:getModifiers(), {})
         local max_en = stats:get('max_energy')
         subject.energy = math.min(subject.energy + amount, max_en)
     end

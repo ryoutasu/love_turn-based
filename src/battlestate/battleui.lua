@@ -37,6 +37,7 @@ function BattleUI:reset()
     self.rewards_tween = nil
     self.rewards_print_progress = 0
     self.show_rewards_items = false
+    self.rewards_h = result_height
 end
 
 function BattleUI:showResult(text)
@@ -273,7 +274,6 @@ function BattleUI:draw(state)
                 else
                     state.state = 'rewards'
                     self.result_text = "Rewards:"
-                    self.rewards_h = result_height
                     self.rewards_tween = Tween.new(0.75, self, { rewards_h = 220 }, 'inOutCubic')
                     self.show_rewards_items = false
                     self.rewards_print_progress = 0

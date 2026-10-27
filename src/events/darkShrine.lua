@@ -13,7 +13,7 @@ local function get_active(player)
 end
 
 local function max_hp(char)
-    return Stats.new(char, RunState:getModifiers(), {}):get('max_health')
+    return Stats(char, RunState:getModifiers(), {}):get('max_health')
 end
 
 return function(player)

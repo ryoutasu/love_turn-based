@@ -43,11 +43,25 @@ function EventState:enter(from, args)
     self._closed       = false
     self._entered_step = false
 
+    -- Сюжетная сцена имеет приоритет над случайным событием на узле:
+    -- если узел размечен нитью, играем её, а не generic-событие.
+    local node = args.node
+    if node and node.story_scene then
+        local result = EventState.generate_story(node, args.player, args.locked)
+        if result then
+            self.steps = result.steps
+            self.title = result.title
+            self.currentStep = 1
+            self._story_node = node
+            return
+        end
+    end
+
     -- Получаем определение события.
     -- Поддерживаем два формата возврата:
     --   1) возвращает таблицу шагов напрямую (старый формат)
     --   2) возвращает { steps = <шаги>, title = <заголовок> } (новый)
-    local event_def = (args.node and args.node.event) or Events["abandonedCamp"]
+    local event_def = (node and node.event) or Events["abandonedCamp"]
     if not event_def then
         self.steps = nil
         return
@@ -63,6 +77,43 @@ function EventState:enter(from, args)
     end
 
     self.currentStep = 1
+end
+
+--- Генерирует payload сюжетной сцены для узла карты.
+--- Возвращает nil, если сцену получить нельзя — тогда вызывающий
+--- откатывается к обычному событию.
+function EventState.generate_story(node, player, locked)
+    local ok, SceneRunner = pcall(require, 'src.story.scene_runner')
+    if not ok or not SceneRunner then return nil end
+
+    local RunState = require 'src.states.run_state'
+    local ThreadGenerator = require 'src.story.thread_generator'
+
+    -- Контекст сцены: тот же, что использовал генератор нити.
+    local okCtx, ctx = pcall(function()
+        return ThreadGenerator.build_context(player, RunState)
+    end)
+    if not okCtx or not ctx then return nil end
+
+    -- Узел знает свой scene id; ставим раннер на этот узел, чтобы
+    -- scene_log и граф оставались согласованными.
+    if RunState.story then
+        RunState.story.node_id = node.story_id or RunState.story.node_id
+    end
+
+    -- Гейт закрыт — переключаемся на узел alt_when_locked
+    -- (например, «рассерженный мастер» вместо обычной сцены босса).
+    if locked and RunState.story then
+        SceneRunner.resolve_node(RunState, true)
+    end
+
+    local okGen, result = pcall(SceneRunner.current, RunState, ctx)
+    if not okGen or not result then
+        print('[story] scene generation failed: ' .. tostring(result))
+        return nil
+    end
+
+    return result.payload
 end
 
 function EventState:leave()

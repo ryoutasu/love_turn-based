@@ -12,6 +12,7 @@ local CharacterSelectScreen = require 'src.character_select_screen'
 local UpgradeSelectScreen   = require 'src.upgrade_select_screen'
 local Stats                 = require 'src.stats'
 local Path                  = MapRenderer.Path
+local StoryPlacement        = require 'src.story.story_placement'
 
 local Levelmap = {}
 
@@ -58,11 +59,79 @@ function Levelmap:enter(from, args)
     RunState:reset(self.player, args.seed)
     self.seed = RunState:getSeed()
 
+    -- Кампания мета-прогресса (мастера, соперник) живёт дольше забега
+    -- и нужна до раскладки сцен.
+    self:_ensure_campaign()
+
     -- Генерация детерминирована: math.randomseed + _generateMap подряд,
     -- без посторонних вызовов math.random между ними.
     math.randomseed(self.seed)
     self:_generateMap()
+
+    -- Раскладка активной сюжетной нити поверх готовой карты.
+    -- Нет нити — забег остаётся обычным roguelite-забегом.
+    self:_place_story()
+
     self:_saveGame()
+end
+
+-- Кампания мета-прогресса: мастера и соперник генерируются один раз
+-- на сейв и не перегенерируются между забегами.
+function Levelmap:_ensure_campaign()
+    local meta = self.player and self.player.meta_story
+    if not meta then return end
+
+    local okMaster, MasterGenerator = pcall(require, 'data.story.generators.master_generator')
+    if okMaster and MasterGenerator then
+        MasterGenerator.ensure_campaign(meta)
+    end
+
+    local okRival, RivalGenerator = pcall(require, 'data.story.generators.rival_generator')
+    if okRival and RivalGenerator then
+        RivalGenerator.ensure(meta, self.player)
+    end
+end
+
+-- Ставит сцены активной нити на карту. Сюжет — надстройка, поэтому
+-- любая ошибка раскладки логируется, но забег не ломает.
+function Levelmap:_place_story()
+    local PlayerMetaStory = require 'src.player_meta_story'
+    local meta = self.player and self.player.meta_story
+    if meta then
+        PlayerMetaStory.begin_new_run(meta)
+    end
+
+    local ok, result = pcall(StoryPlacement.place, self, self.player, RunState)
+    if not ok then
+        print('[story] placement failed: ' .. tostring(result))
+        self.story = nil
+        return
+    end
+    self.story = result
+end
+
+-- Сдвигает указатель сюжетной нити после проигранной сцены.
+-- Если узел линейный (есть .next) — идём дальше; если граф закончился —
+-- закрываем нить через её on_complete.
+function Levelmap:_advance_story(node)
+    if not node or not node.story_id then return end
+
+    local okRunner, SceneRunner = pcall(require, 'src.story.scene_runner')
+    if not okRunner or not SceneRunner then return end
+
+    if not RunState.story then return end
+
+    RunState.story.node_id = node.story_id
+
+    local moved = SceneRunner.advance(RunState)
+    if not moved or SceneRunner.is_terminal(RunState) then
+        local okThread, thread = pcall(function()
+            return require('data.story.threads')[RunState.story.thread_id]
+        end)
+        if okThread and thread and thread.on_complete then
+            pcall(thread.on_complete, self.player.meta_story, RunState.story.thread_state)
+        end
+    end
 end
 
 function Levelmap:leave()
@@ -267,6 +336,12 @@ function Levelmap:resume(from, args)
 
     elseif from == EventState then
         self.currentNode.isCompleted = true
+
+        -- Сюжетный узел: сдвигаем указатель нити на следующий шаг графа.
+        -- Без этого каждая сцена считалась бы последней и граф стоял бы
+        -- на месте (сцены 2..N никогда не проигрывались).
+        self:_advance_story(self.currentNode)
+
         self:_saveGame()
 
     else

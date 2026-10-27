@@ -1,0 +1,139 @@
+# AGENTS.md — Coding rules for AI agents
+
+## Project
+
+**DumbBeasts Adventures** — turn-based tactical roguelike with creature collection.
+Stack: LÖVE (Love2D), Lua 5.1 (LuaJIT), custom `Class{}` OOP via metatables.
+Saves: `serpent` → `run.sav`. UI: `src/ui.lua` (immediate-mode-like).
+Hot reload: `lurker` + `love.event.quit("restart")`.
+
+## Sources of truth (read in this order)
+
+1. `specs.md` — architecture, data model, extension points. **Wins over everything** on conflict.
+2. `AGENTS.md` — this file. Coding rules.
+3. The 3–5 source files relevant to the task. Nothing more unless needed.
+
+Do not load the whole project into context. Load only what the task requires.
+
+## Non-negotiables
+
+1. **Determinism.** All game-logic randomness goes through `RunState:random()` /
+   `RunState:randomInt()`. `math.random` / `love.math.random` is allowed only for
+   cosmetic effects (particles, visual jitter), never for gameplay state.
+2. **Serialization.** Everything that must survive a save is a table of numbers,
+   strings, booleans, or nested tables of those. **No functions, no coroutines,
+   no userdata, no LÖVE objects** in serialized state (`Player.meta_story`,
+   `RunState.story`, `RunState.modifiers`, etc.). Functions are restored from
+   registries by `id` on deserialize.
+3. **Modifiers, not direct mutation.** Never write `character.damage = …`.
+   Add a modifier: permanent → `Character.addModifier`, run-scope →
+   `RunState:addModifier`, battle-scope → `unit.modifiers`. Use `Stats:get()`.
+4. **Isolated event modules.** Every event/scene module is
+   `return { id = ..., generate = function(ctx) -> steps end }`. No side effects
+   at module load time.
+5. **All game-facing text is in English.** Comments can be in English too.
+   No Russian strings in `data/`, `src/states/`, `src/events/`, `data/story/`.
+6. **Don't kill characters outside battle.** Event damage must clamp to
+   `math.max(1, hp - dmg)`. `Unit:die` calls battle logic and will break.
+7. **`EventState` accepts already-instantiated `steps`.** Do not add generation
+   logic inside `EventState`. Generation happens in `scene.generate(ctx)`
+   before pushing the state.
+
+## Do not touch without explicit instruction
+
+- `src/states/eventstate.lua` — stable engine, no changes needed
+- `src/stats.lua`
+- `src/damage_calculator.lua`
+- `src/actorQueue.lua`
+- `src/events/*.lua` — 12 existing events, wrap them if needed but don't rewrite
+- `data/type_chart.lua`
+
+## Key files map
+
+```
+data/
+  upgrades.lua -- 30+ run upgrades
+  story/
+    threads.lua -- story thread registry
+    threads/master_trial.lua -- main narrative thread
+    scenes.lua -- scene registry
+    scenes/*.lua -- scene modules
+    generators/master_generator.lua
+
+src/
+  player.lua -- Player (persistent container)
+  player_meta_story.lua -- campaign-level state helper
+  character.lua -- Character (persistent)
+  stats.lua -- Stats with modifiers
+  damage_calculator.lua -- attr × elem × armor
+  save_manager.lua -- serialize / deserialize / file I/O
+
+  story/
+    thread_generator.lua -- select active thread for a run
+    scene_graph.lua -- pure graph ops (BFS, validate)
+
+  states/
+    townstate.lua -- hub
+    run_state.lua -- run-scope singleton
+    levelmap2.lua -- run map + story map generation
+    eventstate.lua -- narrative engine (DO NOT TOUCH)
+    battlestate.lua -- battle (main)
+    upgrade_select_screen.lua
+    ...
+
+  objects/
+    unit.lua -- battle actor
+    
+  node.lua -- map node (with story support)
+  ui.lua -- UI helpers
+  events.lua -- filler event registry
+```
+
+## Smoke tests
+
+- Location: `tests/`
+- Naming: `tests/smoke_<topic>.lua`
+- Must run **headless** where possible. Stub `love.*` calls as needed at the top
+  of the test file (e.g. `love = love or { math = { random = math.random } }`).
+- Each test: setup → act → assert → `print("smoke_<topic> OK")` → exit 0.
+- Prefer plain Lua assertions (`assert(cond, "message")`) over a test framework.
+- If the test needs a real `love.run` loop, mark it `tests/visual_<topic>.lua` and
+  document how to run it manually.
+
+## Commits
+
+- One task = one commit.
+- Conventional Commits: `feat(scope): …`, `fix(scope): …`, `refactor(scope): …`,
+  `test(scope): …`, `docs: …`, `chore: …`.
+- Never commit `.sav` files, log files, or generated assets.
+- `git diff` must be reviewed before committing. Revert if the agent touched
+  files outside the task's declared scope.
+
+## Workflow per task
+
+1. **Read** this file, then `specs.md`, then the declared source files.
+2. **Plan mode** — propose a plan (files to edit, signatures, test). Do not
+   modify files until the plan is approved (`exit_plan_mode`).
+3. **Implementation** — Standard mode. Edit only the declared files.
+4. **Run** the smoke test from the task. Paste the output.
+5. **Report** — list of changed files, diff summary, test result.
+6. **Commit** — one commit per task.
+
+## Known issues (do not fix unless the task explicitly asks)
+
+- `Levelmap:_pick_filler_type()` can return `'event'`, but filler `event` nodes
+  have `node.event = nil` → `EventState` will crash on open. Currently the
+  filler types are `wild/trainer/rest` only. Do not re-enable `'event'` until
+  the filler-event wiring task is scheduled.
+- `BattleState` does not yet accept `master.battle_party` (Task A).
+- `enraged` flag is stored on `RunState.story.flags.boss_enraged` but not yet
+  applied as modifiers (Task B).
+
+## Definition of "done"
+
+A task is done when:
+- All files in its scope are modified (and only those).
+- The declared smoke test passes.
+- No new globals leaked (`math.random` not used in game logic, no orphan
+  requires).
+- A commit exists with a Conventional Commit message.

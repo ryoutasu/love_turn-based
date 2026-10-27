@@ -13,6 +13,13 @@ local RunState = {
     conditionals = {},     -- { [upgrade_id] = upgrade } — synergy-апгрейды
     active_conditions = {},-- { [upgrade_id] = true } — какие сейчас активны
     applied_upgrades = {}, -- { [upgrade_id] = count }
+
+    -- Процедурный сюжет текущего забега. Заполняется ThreadGenerator.select:
+    --   { thread_id, flags = {}, scene_log = {}, thread_state = {} }
+    -- Сцены пишут сюда (RunState.story.flags.*), поэтому поле обязано
+    -- существовать до первой сцены, а не создаваться «по месту» —
+    -- иначе сцена падает на nil-индексе.
+    story = nil,
 }
 
 -- ------------------------------------------------------------------
@@ -31,6 +38,7 @@ function RunState:reset(player, seed)
     self.conditionals      = {}
     self.active_conditions = {}
     self.applied_upgrades  = {}
+    self.story             = nil
 end
 
 function RunState:endRun()
@@ -320,6 +328,10 @@ function RunState:serialize()
         applied_upgrades  = applied,
         unlocks           = unlocks,
         active_conditions = self.active_conditions,
+        -- Story state: thread id, flags set by scenes, scene log.
+        -- Without this a reload mid-thread would forget every choice made
+        -- so far AND drop the active thread from the save.
+        story             = self.story,
     }
 end
 
@@ -361,6 +373,15 @@ function RunState:deserialize(data)
     end
 
     self.active_conditions = data.active_conditions or {}
+
+    -- Story state (thread id, scene flags, scene log). Tolerate old saves
+    -- that predate the field.
+    self.story = data.story
+    if self.story then
+        self.story.flags     = self.story.flags     or {}
+        self.story.scene_log = self.story.scene_log or {}
+        self.story.thread_state = self.story.thread_state or {}
+    end
 end
 
 return RunState

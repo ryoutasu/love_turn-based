@@ -215,11 +215,25 @@ function Node:draw()
     if released then
         if self.isOpen then
             if not self.isCompleted then
+                -- Сюжетный гейт. Раньше isLocked() нигде не вызывался,
+                -- поэтому запертые узлы (нужен ключ / unlock) проходились
+                -- как обычные. Теперь проверка обязательна.
+                local locked = self:isLocked(Levelmap.player)
+
                 Levelmap.currentNode = self
-                
+
                 Gamestate.push(FadeInState, { color = { r = 1, g = 1, b = 1 }, time = 1, onFadeComplete = function()
                     Levelmap.active = false
-                    Gamestate.push(self:getGamestate(), { player = Levelmap.player, node = self })
+                    -- Для сюжетного узла передаём признак запертости,
+                    -- чтобы сцена могла выбрать alt_when_locked.
+                    if self.story_scene then
+                        self._entered_locked = locked
+                    end
+                    Gamestate.push(self:getGamestate(), {
+                        player = Levelmap.player,
+                        node   = self,
+                        locked = locked,
+                    })
                     Gamestate.push(FadeOutState, { color = { r = 1, g = 1, b = 1 }, time = 1 })
                 end })
             end

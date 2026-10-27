@@ -8,6 +8,7 @@
 local suites = {
     'tests/test_damage.lua',
     'tests/test_data_integrity.lua',
+    'tests/test_story.lua',
 }
 
 local failed = 0
