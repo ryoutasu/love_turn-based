@@ -1,10 +1,17 @@
 -- tests/smoke_master_boss.lua
 --
--- Integration smoke test for the master-boss pipeline.
+-- Integration smoke test for the master-boss pipeline:
+--   EventState close -> Levelmap:_handle_story_node_complete -> BattleState
+--   BattleState win  -> Levelmap:resume(_, { result = 'win' })  -> on_victory
+--   BattleState lose -> Levelmap:resume(_, { result = 'lose' }) -> on_defeat
 --
--- What this file checks, and what it deliberately reports as missing, is
--- driven by what src/states/levelmap2.lua actually implements today. See the
--- "Groups whose production code does not exist yet" section at the bottom.
+-- Levelmap:resume dispatches on _G.BattleState / _G.EventState /
+-- _G.RestState / _G.ShopState / _G.FadeInState / _G.FadeOutState.
+-- main.lua establishes these via bare global assignments at
+-- lines 31,32,37,39,40,41,42. This test mirrors that exactly
+-- with bare assignments below. Do not replace these with
+-- package.loaded stubs: those only affect `require`, which
+-- levelmap2 does not call for these modules.
 --
 -- Headless, no LÖVE runtime. Run: lua tests/smoke_master_boss.lua
 
@@ -68,19 +75,24 @@ dofile(root .. '/utils.lua')
 -- ---------------------------------------------------------------------------
 -- Fake states, installed BEFORE Levelmap loads.
 --
--- levelmap2.lua binds the real state modules at its own load time
--- (`local UpgradeSelectScreen = require 'src.upgrade_select_screen'`), and
--- src/node.lua resolves BattleState / EventState from package.loaded when its
--- node_gamestates table is evaluated. Both happen during `require`, so these
--- entries must exist first. Fakes carry no game logic.
+-- Two different binding mechanisms, mirroring production:
+--
+--   1. State modules are GLOBALS. levelmap2.lua never requires them; it reads
+--      BattleState / EventState / ... out of _ENV, exactly as main.lua:31-42
+--      populates them. Only bare assignments reach that lookup path.
+--   2. UpgradeSelectScreen is an upvalue: levelmap2.lua binds it at its own
+--      load time via `require 'src.upgrade_select_screen'`, so it is stubbed
+--      through package.loaded (below), not through a global.
 -- ---------------------------------------------------------------------------
 
 local Fakes = {}
+Fakes.FadeInState         = { __name = 'FadeInState' }
+Fakes.FadeOutState        = { __name = 'FadeOutState' }
+Fakes.TownState           = { __name = 'TownState' }
 Fakes.BattleState         = { __name = 'BattleState' }
-Fakes.EventState          = { __name = 'EventState' }
 Fakes.RestState           = { __name = 'RestState' }
 Fakes.ShopState           = { __name = 'ShopState' }
-Fakes.TownState           = { __name = 'TownState' }
+Fakes.EventState          = { __name = 'EventState' }
 Fakes.UpgradeSelectScreen = {
     __name   = 'UpgradeSelectScreen',
     isActive = function() return false end,
@@ -88,16 +100,17 @@ Fakes.UpgradeSelectScreen = {
     draw     = function() end,
 }
 
-package.loaded['src.states.battlestate']           = Fakes.BattleState
-package.loaded['src.states.eventstate']            = Fakes.EventState
-package.loaded['src.states.reststate']             = Fakes.RestState
-package.loaded['src.states.shopstate']             = Fakes.ShopState
-package.loaded['src.states.townstate']             = Fakes.TownState
-package.loaded['src.states.upgrade_select_screen'] = Fakes.UpgradeSelectScreen
+-- Bare assignments, same shape as main.lua:31,32,37,39,40,41,42.
+FadeInState  = Fakes.FadeInState
+FadeOutState = Fakes.FadeOutState
+TownState    = Fakes.TownState
+BattleState  = Fakes.BattleState
+RestState    = Fakes.RestState
+ShopState    = Fakes.ShopState
+EventState   = Fakes.EventState
 
--- src/node.lua reads these as globals; main.lua normally provides them.
-BattleState = Fakes.BattleState
-EventState  = Fakes.EventState
+-- The one state module levelmap2 captures as an upvalue.
+package.loaded['src.upgrade_select_screen'] = Fakes.UpgradeSelectScreen
 
 -- ---------------------------------------------------------------------------
 -- Globals Levelmap / Node touch. Recorded so tests can inspect calls.
@@ -121,7 +134,8 @@ Gamestate = {
 
 Tagtext = { add = function(...) tagtextCalls[#tagtextCalls + 1] = { ... } end }
 
--- Real RunState: cheap to load, and its API is exactly what Node/Levelmap call.
+-- Real RunState: it is required (not read as a global) by levelmap2, and its
+-- API is exactly what Node/Levelmap call.
 local RunState = require 'src.states.run_state'
 _G.RunState = RunState
 RunState.story  = { thread_id = 'master_trial', flags = {} }
@@ -142,34 +156,33 @@ package.loaded['src.save_manager'] = {
 -- Modules under test
 -- ---------------------------------------------------------------------------
 
--- src.states.levelmap2 pulls in the REAL src.player, which requires the real
--- state modules again during this require. Those requires load Node, and Node
--- snapshots BattleState/EventState into its node_gamestates table at load time.
--- Re-assert the fakes after Levelmap loads, and again after Node loads, so the
--- routing table is built from the fakes and not from half-loaded reals.
-local Levelmap = require 'src.states.levelmap2'
-
+-- src.states.levelmap2 pulls in the REAL src.player, which re-enters
+-- battlestate/eventstate through src/actions and src/ai. Under a 5.1-style
+-- runtime those nested chunks resolve the bare state names in their OWN
+-- environment, never in _G, so the globals above stay pinned to the fakes.
+-- Re-assert them after every load boundary anyway: cheap, and it keeps the
+-- mirror honest if the module graph ever changes.
 local function assert_fakes_installed()
-    for key, fake in pairs({
-        ['src.states.battlestate'] = Fakes.BattleState,
-        ['src.states.eventstate']  = Fakes.EventState,
-    }) do
-        package.loaded[key] = fake
-    end
-    BattleState = Fakes.BattleState
-    EventState  = Fakes.EventState
+    FadeInState  = Fakes.FadeInState
+    FadeOutState = Fakes.FadeOutState
+    TownState    = Fakes.TownState
+    BattleState  = Fakes.BattleState
+    RestState    = Fakes.RestState
+    ShopState    = Fakes.ShopState
+    EventState   = Fakes.EventState
 end
 
+local Levelmap = require 'src.states.levelmap2'
 assert_fakes_installed()
 
--- Drop any table a pre-fake load may have produced, then load Node for real.
+-- Node snapshots BattleState/EventState into node_gamestates at load time, so
+-- it must be loaded AFTER the globals exist.
 package.loaded['src.node'] = nil
 local Node = require 'src.node'
 assert_fakes_installed()
 
 local PlayerMetaStory = require 'src.player_meta_story'
 local MasterGenerator = require 'data.story.generators.master_generator'
-local SceneGraph      = require 'src.story.scene_graph'
 local Threads         = require 'data.story.threads'
 
 local SEED = 4242
@@ -216,6 +229,14 @@ local function reset_calls()
     tagtextCalls   = {}
 end
 
+local function calls(kind)
+    local out = {}
+    for _, call in ipairs(gamestateCalls) do
+        if call.kind == kind then out[#out + 1] = call end
+    end
+    return out
+end
+
 local function calls_with_state(state)
     local out = {}
     for _, call in ipairs(gamestateCalls) do
@@ -236,17 +257,22 @@ local function make_node(extra)
     return node
 end
 
+-- Mirrors what story_placement.stamp() produces for the boss node:
+-- story_id, story_scene, requires, alt_when_locked, is_boss, is_master_boss.
 local function master_boss_node(extra)
     local fields = {
-        is_master_boss = true,
-        is_boss        = true,
-        story_scene    = 'master_boss',
+        is_master_boss  = true,
+        is_boss         = true,
+        story_scene     = 'master_boss',
+        story_id        = 'boss',
+        requires        = { run_key = 'dojo_key' },
+        alt_when_locked = 'boss_angry',
     }
     for k, v in pairs(extra or {}) do fields[k] = v end
     return make_node(fields)
 end
 
-local failures, skips = 0, 0
+local failures = 0
 
 local function test(label, fn)
     local ok, err = pcall(fn)
@@ -258,131 +284,246 @@ local function test(label, fn)
     end
 end
 
-local function skip(label, reason)
-    skips = skips + 1
-    print('  SKIP ' .. label .. '\n         ' .. reason)
+-- Every handler this suite depends on must exist. No silent skips: a missing
+-- handler is a hard failure that names it.
+local function require_handlers()
+    for _, name in ipairs({
+        '_handle_story_node_complete',
+        '_handle_master_victory',
+        '_handle_master_defeat',
+        '_handle_run_failed',
+    }) do
+        assert(type(Levelmap[name]) == 'function',
+            ('Levelmap:%s is missing from src/states/levelmap2.lua'):format(name))
+    end
+end
+
+-- Shared fixture: fresh campaign, player, levelmap and a master-boss node that
+-- is being closed out of EventState. Run key held, not enraged.
+local function boss_setup()
+    RunState.story   = { thread_id = 'master_trial', flags = {} }
+    RunState.unlocks = { dojo_key = true }
+
+    local camp   = fresh_campaign()
+    local player = make_player(camp)
+    player.lives = 3
+    local lm     = make_levelmap(player)
+    local node   = master_boss_node()
+    lm.currentNode = node
+
+    return lm, node, player, camp
 end
 
 -- ===========================================================================
--- T1 — master-boss node routing
+-- T1 — master-boss node: EventState close -> BattleState, then resolution
 -- ===========================================================================
---
--- Levelmap:_handle_story_node_complete does not exist (see the missing-groups
--- section), so the routing half of that contract is asserted where it does
--- live: src/node.lua maps node types to states.
---
--- Nodes are built with a battle type ('wild'/'trainer'/'end'), because
--- Node:getGamestate only understands node types. story_placement.stamp() sets
--- type = 'event' on every story node, the boss included, while is_boss /
--- is_master_boss are flags of their own. So a story boss node routes to
--- EventState here; whether that is a defect depends on the absent
--- _handle_story_node_complete, and T1c pins the behavior either way.
 
-test('T1a master-boss node routes to BattleState', function()
+test('T1a closing a master-boss story node pushes BattleState', function()
+    require_handlers()
     reset_calls()
-    local node = master_boss_node({ type = 'wild' })
-    local gs = node:getGamestate()
-    assert(gs == Fakes.BattleState,
-        ('a master-boss battle node must route to BattleState, got %s (type=%s)')
-            :format(tostring(gs and gs.__name or gs), tostring(node.type)))
+    local lm, node, player, camp = boss_setup()
+    local master_id = camp.current_master_id
+
+    Levelmap._handle_story_node_complete(lm, node)
+
+    local pushes = calls('push')
+    assert(#pushes == 1,
+        ('expected exactly 1 Gamestate.push, got %d'):format(#pushes))
+
+    local push = pushes[1]
+    assert(push.state == Fakes.BattleState,
+        'push target must be BattleState')
+
+    local args = push.args
+    assert(type(args) == 'table', 'push args must be a table')
+    assert(args.master ~= nil, 'args.master must not be nil')
+    assert(args.master.id == master_id,
+        ('args.master.id: expected %q, got %q')
+            :format(tostring(master_id), tostring(args.master.id)))
+    assert(args.node == node, 'args.node must be the same node')
+    assert(args.player == player, 'args.player must be the same player')
+    assert(args.enraged == false, 'args.enraged must be false without boss_enraged')
+
+    assert(not node.isCompleted,
+        'boss node must stay open until the battle resolves')
+    assert(lm.active == false, 'levelmap must be inactive while the battle runs')
 end)
 
-test('T1b closing a story node completes it without pushing a battle', function()
+test('T1d master victory advances progression', function()
+    require_handlers()
+    reset_calls()
+    local lm, node, player, camp = boss_setup()
+    local master_id = camp.current_master_id
+    local master    = camp.masters[master_id]
+
+    Levelmap._handle_story_node_complete(lm, node)
+
+    -- Spy _advance_story: closing the scene must not advance the thread yet.
+    local advanceCalls = 0
+    local advanceNodes = {}
+    local realAdvance  = Levelmap._advance_story
+    Levelmap._advance_story = function(self, n)
+        advanceCalls = advanceCalls + 1
+        advanceNodes[#advanceNodes + 1] = n
+        return realAdvance(self, n)
+    end
+
+    local ok, err = pcall(function()
+        assert(advanceCalls == 0,
+            ('_advance_story ran %d time(s) before the battle resolved'):format(advanceCalls))
+
+        Levelmap.resume(lm, Fakes.BattleState, { result = 'win' })
+
+        assert(advanceCalls == 1,
+            ('_advance_story: expected exactly 1 call, got %d'):format(advanceCalls))
+        assert(advanceNodes[1] == node, '_advance_story must receive the boss node')
+    end)
+    Levelmap._advance_story = realAdvance
+    if not ok then error(err, 0) end
+
+    assert(master.defeated == true,
+        'winning must mark the master defeated')
+    assert(camp.current_master_id ~= master_id,
+        ('master must advance: still %q'):format(tostring(camp.current_master_id)))
+    assert(node.isCompleted == true, 'winning must close the boss node')
+    assert(lm.currentNode == nil, 'currentNode must be cleared after victory')
+end)
+
+test('T1e master defeat spends lives, keeps the master and the thread', function()
+    require_handlers()
+    reset_calls()
+    local lm, node, player, camp = boss_setup()
+    camp.active_thread = { id = 'master_trial', params = {}, started_run = 1 }
+    local master_id = camp.current_master_id
+    local master    = camp.masters[master_id]
+
+    Levelmap._handle_story_node_complete(lm, node)
+    Levelmap.resume(lm, Fakes.BattleState, { result = 'lose' })
+
+    assert(player.lives == 0,
+        ('lives: expected 0, got %s'):format(tostring(player.lives)))
+    assert(master.defeats == 1,
+        ('defeats: expected 1, got %s'):format(tostring(master.defeats)))
+    assert(master.defeated == false, 'a loss must not mark the master defeated')
+    assert(camp.current_master_id == master_id, 'a loss must not advance the master')
+    assert(camp.active_thread and camp.active_thread.id == 'master_trial',
+        'a loss must keep the active thread')
+    assert(#calls('pop') == 1,
+        ('expected 1 Gamestate.pop, got %d'):format(#calls('pop')))
+    assert(lm.currentNode == nil, 'currentNode must be cleared after defeat')
+end)
+
+-- ===========================================================================
+-- T4b — canary: a non-master battle win must reach the legacy dispatch
+-- ===========================================================================
+
+test('T4b non-master battle win routes through UpgradeSelectScreen', function()
+    require_handlers()
+    reset_calls()
+    RunState.story = { thread_id = 'master_trial', flags = {} }
+    local camp   = fresh_campaign()
+    local lm     = make_levelmap(make_player(camp))
+    local node   = make_node({})          -- no is_master_boss, no story_scene
+    lm.currentNode = node
+
+    -- Canary for the silent-fallthrough class of bug: if resume() misses the
+    -- BattleState branch (e.g. the global is no longer the fake), it lands in
+    -- `else`, clears currentNode and never touches this stub — and the
+    -- assertion below fails loudly instead of passing on the epilogue alone.
+    local opened = 0
+    local realOpen = Fakes.UpgradeSelectScreen.open
+    Fakes.UpgradeSelectScreen.open = function() opened = opened + 1 end
+
+    local advanceCalls = 0
+    local realAdvance  = Levelmap._advance_story
+    Levelmap._advance_story = function(self, n)
+        advanceCalls = advanceCalls + 1
+        return realAdvance(self, n)
+    end
+
+    local ok, err = pcall(function()
+        Levelmap.resume(lm, Fakes.BattleState, { result = 'win' })
+    end)
+
+    Fakes.UpgradeSelectScreen.open = realOpen
+    Levelmap._advance_story = realAdvance
+    if not ok then error(err, 0) end
+
+    assert(opened == 1,
+        ('UpgradeSelectScreen:open expected once, got %d — resume did not '
+         .. 'take the BattleState branch'):format(opened))
+    assert(advanceCalls == 0,
+        ('_advance_story must not run for a non-story battle, ran %d time(s)')
+            :format(advanceCalls))
+    assert(node.isCompleted == true, 'a normal battle win closes the node')
+    assert(lm.currentNode == nil, 'currentNode cleared by the shared epilogue')
+end)
+
+-- ===========================================================================
+-- Story-node routing and gates
+-- ===========================================================================
+
+test('T1b non-master story node completes without a battle', function()
+    require_handlers()
     reset_calls()
     local camp = fresh_campaign()
     local lm   = make_levelmap(make_player(camp))
-    local node = master_boss_node({ type = 'event' })
+    local node = make_node({ story_scene = 'master_crossroads', story_id = 'crossroads' })
     lm.currentNode = node
 
     Levelmap.resume(lm, Fakes.EventState, { complete = true })
 
     assert(node.isCompleted == true, 'story node should be completed on close')
     assert(#calls_with_state(Fakes.BattleState) == 0,
-        'closing EventState must not push BattleState by itself')
+        'closing a non-boss story node must not push BattleState')
+    assert(lm.currentNode == nil, 'currentNode cleared by the shared epilogue')
 end)
 
-test('T1c story boss node (type=event, is_master_boss) routes to EventState', function()
+test('T1c story boss node routes to EventState, then dispatches the battle', function()
+    require_handlers()
     reset_calls()
-    -- Mirrors what story_placement.stamp() produces for the boss node.
-    local node = master_boss_node({ type = 'event' })
+    -- Mirrors what story_placement.stamp() produces: type stays 'event', so the
+    -- scene plays first; is_master_boss is what triggers the battle afterwards.
+    local node = master_boss_node()
     local gs = node:getGamestate()
-
     assert(gs == Fakes.EventState,
-        ('PINNED GAP: story boss node now routes to %s — if Levelmap gained a '
-         .. 'post-EventState battle dispatch, update Test 1 to follow it')
+        ('story boss node must play its scene first, got %s')
             :format(tostring(gs and gs.__name or gs)))
-    assert(node.is_master_boss == true,
-        'is_master_boss must survive on the node for later dispatch')
-    assert(node.is_boss == true, 'is_boss must survive on the node')
+    assert(node.is_master_boss == true, 'is_master_boss must survive on the node')
+
+    local lm, _, _, camp = boss_setup()
+    lm.currentNode = node
+    Levelmap.resume(lm, Fakes.EventState, { complete = true })
+
+    local pushes = calls('push')
+    assert(#pushes == 1 and pushes[1].state == Fakes.BattleState,
+        'closing a master-boss story node must hand off to BattleState')
+    assert(not node.isCompleted, 'boss node stays open across the battle')
 end)
 
--- ===========================================================================
--- T2 — master defeat: memory kept, thread kept
--- ===========================================================================
-
-test('T2 master defeat keeps the master and the thread', function()
+test('T2 master defeat via thread keeps memory and thread', function()
+    require_handlers()
     reset_calls()
     local camp = fresh_campaign()
     camp.active_thread = { id = 'master_trial', params = {}, started_run = 1 }
-    local player = make_player(camp)
-    player.lives = 3
-    local lm   = make_levelmap(player)
-    local node = master_boss_node()
-    lm.currentNode = node
-
     local master_id = camp.current_master_id
     local master    = camp.masters[master_id]
 
-    -- Defeat contract (stub): the thread's on_fail records the loss.
-    local thread = Threads[camp.active_thread.id]
+    local thread = Threads.master_trial
     assert(thread and thread.on_fail, 'master_trial must expose on_fail')
     thread.on_fail(camp, nil)
 
-    assert(master.defeats == 1,
-        ('defeat count: expected 1, got %s'):format(tostring(master.defeats)))
-    assert(master.defeated == false, 'a defeat must not mark the master defeated')
-    assert(camp.current_master_id == master_id, 'defeat must not advance the master')
-    assert(camp.active_thread and camp.active_thread.id == 'master_trial',
-        'defeat must keep the active thread')
-
-    -- Real resume(BattleState) path as it exists today.
-    Levelmap.resume(lm, Fakes.BattleState, { won = false })
-    assert(node.isCompleted == true, 'resume marks the boss node completed')
-    assert(camp.current_master_id == master_id, 'resume must not advance the master')
-
-    -- The loss contract (lives -> 0) is only reachable if Levelmap consumes the
-    -- battle result. It does not: resume() branches on args.result, not args.won.
-    assert(player.lives == 3,
-        ('PINNED GAP: lives changed to %s — Levelmap now handles defeat; '
-         .. 'fold Test 3/R6 into this group'):format(tostring(player.lives)))
-end)
-
--- ===========================================================================
--- T3 — routing and gates
--- ===========================================================================
-
-test('T3a non-master story node completes without a battle', function()
-    reset_calls()
-    local camp = fresh_campaign()
-    local lm   = make_levelmap(make_player(camp))
-    local node = make_node({ story_scene = 'master_crossroads' })
-    lm.currentNode = node
-
-    Levelmap.resume(lm, Fakes.EventState, { complete = true })
-
-    assert(node.isCompleted == true, 'non-master story node should complete')
-    assert(#calls_with_state(Fakes.BattleState) == 0,
-        'no BattleState push for a non-master story node')
+    assert(master.defeats == 1, 'on_fail must record the defeat')
+    assert(master.defeated == false, 'on_fail must not mark the master defeated')
+    assert(camp.current_master_id == master_id, 'on_fail must not advance the master')
+    assert(camp.active_thread.id == 'master_trial', 'on_fail must keep the thread')
 end)
 
 test('T3b resolve_scene_id follows alt_when_locked', function()
     reset_calls()
     RunState.unlocks = {}
     local player = make_player()
-    local node = master_boss_node({
-        requires        = { run_key = 'dojo_key' },
-        alt_when_locked = 'boss_angry',
-    })
+    local node = master_boss_node()
 
     assert(node:isLocked(player) == true, 'node should be locked without the run key')
     assert(node:resolve_scene_id(player) == 'boss_angry',
@@ -396,7 +537,8 @@ test('T3b resolve_scene_id follows alt_when_locked', function()
     RunState.unlocks = {}
 end)
 
-test('T3c story_key gate is not consumed by resume', function()
+test('T3c story_key gate is consumed when the node closes', function()
+    require_handlers()
     reset_calls()
     local camp = fresh_campaign()
     camp.persistent_keys.moon_key = true
@@ -405,46 +547,22 @@ test('T3c story_key gate is not consumed by resume', function()
     local lm   = make_levelmap(player)
     local node = make_node({
         story_scene = 'moon_door',
+        story_id    = 'moon_door',
         requires    = { story_key = 'moon_key' },
     })
     lm.currentNode = node
 
     Levelmap.resume(lm, Fakes.EventState, { complete = true })
 
-    -- Consumption belongs to the scene / key machinery, not to resume().
-    assert(camp.persistent_keys.moon_key == true,
-        'PINNED GAP: resume consumed the story key — update this test if intended')
+    assert(camp.persistent_keys.moon_key == nil,
+        'closing a story_key-gated node must consume the key')
 end)
-
--- ===========================================================================
--- Missing production code — reported, never faked.
--- ===========================================================================
-
-local MISSING = {
-    { '_handle_story_node_complete', 'node close -> BattleState push' },
-    { '_handle_master_victory',      'win  -> MasterGenerator.on_victory' },
-    { '_handle_master_defeat',       'lose -> MasterGenerator.on_defeat' },
-    { '_handle_run_failed',          'lose -> lives -> TownState' },
-}
-
-for _, entry in ipairs(MISSING) do
-    local name, meaning = entry[1], entry[2]
-    if Levelmap[name] then
-        test('T-gap Levelmap:' .. name, function()
-            assert(false, ('PINNED: Levelmap:%s now exists (%s) — '
-                .. 'fold this group back into the suite'):format(name, meaning))
-        end)
-    else
-        skip('Levelmap:' .. name,
-            'not implemented in src/states/levelmap2.lua (' .. meaning .. ')')
-    end
-end
 
 -- ===========================================================================
 -- Report
 -- ===========================================================================
 
-print(('%d assertion group(s) failed, %d skipped'):format(failures, skips))
+print(('%d assertion group(s) failed'):format(failures))
 if failures > 0 then
     print('smoke_master_boss FAILED')
     os.exit(1)

@@ -13,6 +13,8 @@ local UpgradeSelectScreen   = require 'src.upgrade_select_screen'
 local Stats                 = require 'src.stats'
 local Path                  = MapRenderer.Path
 local StoryPlacement        = require 'src.story.story_placement'
+local PlayerMetaStory       = require 'src.player_meta_story'
+local MasterGenerator       = require 'data.story.generators.master_generator'
 
 local Levelmap = {}
 
@@ -132,6 +134,85 @@ function Levelmap:_advance_story(node)
             pcall(thread.on_complete, self.player.meta_story, RunState.story.thread_state)
         end
     end
+end
+
+-- Закрытие сюжетного узла. Обычная сцена просто отмечается пройденной,
+-- а узел босса-мастера вместо этого запускает бой: нить двигаем только
+-- после его исхода.
+function Levelmap:_handle_story_node_complete(node)
+    -- Ключ, который открыл эту сцену, израсходован.
+    if node.requires and node.requires.story_key then
+        PlayerMetaStory.consume_story_key(
+            self.player.meta_story, node.requires.story_key)
+    end
+
+    if node.is_master_boss then
+        local master = MasterGenerator.current(self.player.meta_story)
+        if not master then
+            -- Без мастера бой не собрать, но и узел не оставляем висеть.
+            node.isCompleted = true
+            self:_saveGame()
+            return
+        end
+
+        local enraged = RunState.story and RunState.story.flags
+                        and RunState.story.flags.boss_enraged
+
+        self.active = false
+        Gamestate.push(BattleState, {
+            player  = self.player,
+            node    = node,
+            master  = master,
+            enraged = enraged or false,
+        })
+
+        -- Нарочно: узел НЕ завершаем и нить НЕ двигаем. Исход боя решается
+        -- в _handle_master_victory / _handle_master_defeat.
+        return
+    end
+
+    node.isCompleted = true
+    self:_advance_story(node)
+    self:_saveGame()
+end
+
+-- Победа над мастером: узел закрыт, нить двигается (на терминальном узле
+-- это поднимает thread.on_complete -> MasterGenerator.on_victory).
+function Levelmap:_handle_master_victory(node)
+    node.isCompleted = true
+    self:_advance_story(node)
+    self:_saveGame()
+    self.currentNode = nil
+    if self.cancel_target_mode then self:cancel_target_mode() end
+end
+
+-- Поражение от мастера: мастер запоминает попытку, жизни кончаются.
+function Levelmap:_handle_master_defeat(node)
+    -- Нить ищем так же, как _advance_story: через RunState.story.thread_id
+    -- и реестр data.story.threads.
+    local thread
+    if RunState.story then
+        local okThread, found = pcall(function()
+            return require('data.story.threads')[RunState.story.thread_id]
+        end)
+        if okThread then thread = found end
+    end
+
+    if thread and thread.on_fail then
+        thread.on_fail(self.player.meta_story,
+            RunState.story and RunState.story.thread_state)
+    end
+
+    self.player.lives = 0
+    self:_handle_run_failed()
+end
+
+-- Жизни кончились — выход с карты тем же путём, что и в resume.
+function Levelmap:_handle_run_failed()
+    self.active = false
+    self.currentNode = nil
+    Gamestate.pop()
+    if self.cancel_target_mode then self:cancel_target_mode() end
 end
 
 function Levelmap:leave()
@@ -308,6 +389,18 @@ function Levelmap:resume(from, args)
     self:openNeighborNodes(self.currentNode)
 
     if from == BattleState then
+        -- Бой с мастером: исход решают обработчики, узел закрывает только
+        -- победа. Раньше узел отмечался пройденным здесь, до проверки
+        -- результата.
+        if self.currentNode.is_master_boss then
+            if args.result == 'lose' then
+                self:_handle_master_defeat(self.currentNode)
+            else
+                self:_handle_master_victory(self.currentNode)
+            end
+            return
+        end
+
         self.currentNode.isCompleted = true
 
         if args.result == 'lose' then
@@ -335,14 +428,14 @@ function Levelmap:resume(from, args)
         self:_saveGame()
 
     elseif from == EventState then
-        self.currentNode.isCompleted = true
-
-        -- Сюжетный узел: сдвигаем указатель нити на следующий шаг графа.
-        -- Без этого каждая сцена считалась бы последней и граф стоял бы
-        -- на месте (сцены 2..N никогда не проигрывались).
-        self:_advance_story(self.currentNode)
-
-        self:_saveGame()
+        -- Сюжетный узел идёт через свой обработчик: он решает, закрыть узел
+        -- и сдвинуть нить (обычная сцена) или запустить бой (босс мастера).
+        if self.currentNode.story_scene then
+            self:_handle_story_node_complete(self.currentNode)
+        else
+            self.currentNode.isCompleted = true
+            self:_saveGame()
+        end
 
     else
         self.currentNode.isCompleted = true
