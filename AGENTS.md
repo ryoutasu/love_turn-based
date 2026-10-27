@@ -128,6 +128,18 @@ committing.
 
 ## Known issues (do not fix unless the task explicitly asks)
 
+- Thread pinning is **post-build**: `ThreadGenerator.select` pins
+  `active_thread` only after a thread's `build(ctx)` has been called and
+  returned a non-nil graph. If a previously pinned thread's build now returns
+  nil (runtime guard changed), the pin is released and selection proceeds
+  normally. Threads with build-time guards (`lost_beast`: party < 2 or all HP
+  > 60%; `rival_encounter`: no rival yet) are first-class citizens — the pool
+  contains only threads whose build succeeds. `build` must be side-effect free
+  (no RNG, no mutation) because it runs during pool construction; verified for
+  every registered thread by `tests/smoke_thread_build_contract.lua`.
+  `select()` returns the built graph as a third value and
+  `StoryPlacement.place` accepts it via an `{ thread, graph }` options table,
+  so a run selects and builds exactly once.
 - Placement `is_usable` accepts `{event, wild, trainer}`. Trainer nodes are
   disposable filler (avg 16.46/map, max 20/map) and are the only node type
   needed to reach 100% pinned-sweep placement success. Shop and rest remain

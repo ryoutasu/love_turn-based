@@ -229,20 +229,45 @@ local function candidates_for(parent_nodes, used, start_node, by_point, from_sta
     return nodes
 end
 
---- Main entry: attach the active thread to the map.
+--- Main entry: select the thread (unless one is supplied), then place its graph.
 --- @param levelmap  Levelmap state (needs .nodes, .currentNode, .generator)
 --- @param player    Player
 --- @param runState  RunState
+--- @param opts      optional { thread = ..., graph = ... } from a prior select()
 --- @return table|nil { thread, graph, placed = { node }, ctx }
-function StoryPlacement.place(levelmap, player, runState)
-    local ok, thread = pcall(ThreadGenerator.select, player, runState, Threads)
-    if not ok or not thread then return nil end
+function StoryPlacement.place(levelmap, player, runState, opts)
+    opts = opts or {}
 
-    local ctx   = ThreadGenerator.build_context(player, runState)
-    local start = SceneRunner._begin(thread, ctx, runState)
-    if not start then return nil end
+    local thread, graph, ctx
 
-    local graph = start.graph
+    if opts.thread and opts.graph then
+        -- Already selected. Do NOT re-select: select() pins active_thread and
+        -- bumps total_runs, so a second call returns a forced continuation.
+        thread, graph = opts.thread, opts.graph
+        ctx = ThreadGenerator.build_context(player, runState)
+    else
+        local ok, selected, selected_ctx, selected_graph = pcall(
+            ThreadGenerator.select, player, runState, Threads)
+        if not ok or not selected or not selected_graph then return nil end
+        thread, ctx, graph = selected, selected_ctx, selected_graph
+    end
+
+    if not thread or not graph then return nil end
+
+    -- Register story state and validate the graph up front.
+    local okValidate = pcall(SceneGraph.validate, graph)
+    if not okValidate then return nil end
+    if not runState.story then
+        runState.story = {
+            thread_id    = thread.id,
+            flags        = {},
+            scene_log    = {},
+            thread_state = {},
+        }
+    end
+    runState.story.graph   = graph
+    runState.story.node_id = 'start'
+
     local nodes = levelmap.nodes
     if not nodes or #nodes == 0 then return nil end
 

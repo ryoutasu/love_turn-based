@@ -103,7 +103,17 @@ function Levelmap:_place_story()
         PlayerMetaStory.begin_new_run(meta)
     end
 
-    local ok, result = pcall(StoryPlacement.place, self, self.player, RunState)
+    -- One select() per run: it pins active_thread and bumps total_runs, so a
+    -- second call would return a forced continuation. select() also builds the
+    -- graph, which place() reuses instead of rebuilding.
+    local ok, result = pcall(function()
+        local ThreadGenerator = require 'src.story.thread_generator'
+        local Threads         = require 'data.story.threads'
+        local thread, _, graph = ThreadGenerator.select(self.player, RunState, Threads)
+        if not thread or not graph then return nil end
+        return StoryPlacement.place(self, self.player, RunState,
+            { thread = thread, graph = graph })
+    end)
     if not ok then
         print('[story] placement failed: ' .. tostring(result))
         self.story = nil

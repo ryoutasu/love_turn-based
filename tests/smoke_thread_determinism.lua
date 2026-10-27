@@ -264,6 +264,44 @@ test('D7 master_trial appears in the pool for every seed', function()
     end
 end)
 
+test('D7b selection is stable across two resets for seeds 1..20', function()
+    local first = {}
+    for seed = 1, 20 do first[seed] = select_once(seed).picked end
+    for seed = 1, 20 do
+        local again = select_once(seed).picked
+        assert(again == first[seed],
+            ('seed %d: %q on first select, %q on second')
+                :format(seed, tostring(first[seed]), tostring(again)))
+    end
+end)
+
+test('D7c a stale lost_beast pin is released after the party heals', function()
+    -- lost_beast.build() refuses when every creature is above 60% HP. A pin
+    -- left over from an earlier (hurt) run must not survive that.
+    local player = make_player(1)
+    player.charactersActive = {
+        { name = 'Emberpuff', health = 28, max_health = 28, level = 1, exp = 0 },
+        { name = 'Terrow',    health = 30, max_health = 30, level = 1, exp = 0 },
+    }
+    player.meta_story.active_thread = { id = 'lost_beast', params = {}, started_run = 0 }
+
+    RunState:reset(player, 1)
+    local thread = ThreadGenerator.select(player, RunState, Threads)
+    local id = RunState.story and RunState.story.thread_id
+
+    assert(id ~= 'lost_beast',
+        ('lost_beast selected despite an unmet build guard (id=%q)')
+            :format(tostring(id)))
+    assert(not (player.meta_story.active_thread
+        and player.meta_story.active_thread.id == 'lost_beast'),
+        'the stale lost_beast pin was not released')
+    if thread then
+        assert(id == thread.id,
+            ('RunState.story.thread_id %q disagrees with select() %q')
+                :format(tostring(id), tostring(thread.id)))
+    end
+end)
+
 -- ===========================================================================
 -- The measurement artefact itself
 -- ===========================================================================

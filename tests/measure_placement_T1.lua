@@ -117,13 +117,26 @@ print = function(...)
     real_print(...)
 end
 
-local function make_player(seed)
+-- Party styles. lost_beast.build guards on party >= 2 AND at least one creature
+-- below 60% HP, so an empty party can never select it — that was why the old
+-- fixture reported lost_beast 0/13. 'hurt' exercises the guard's passing side.
+local PARTY_STYLES = {
+    empty = function() return {} end,
+    hurt = function()
+        return {
+            { name = 'Emberpuff', health = 20, max_health = 28, level = 1, exp = 0 },
+            { name = 'Terrow',    health = 5,  max_health = 30, level = 1, exp = 0 },
+        }
+    end,
+}
+
+local function make_player(seed, party_style)
     local camp = PlayerMetaStory.create(seed)
     MasterGenerator.ensure_campaign(camp)
     return {
         meta_story       = camp,
         lives            = 3,
-        charactersActive = {},
+        charactersActive = PARTY_STYLES[party_style or 'empty'](),
         charactersSpare  = {},
         shards           = {},
         inventory        = {},
@@ -141,8 +154,8 @@ local function make_levelmap(player, seed)
     return lm
 end
 
-local function run_seed(seed, pin)
-    local player = make_player(seed)
+local function run_seed(seed, pin, party_style)
+    local player = make_player(seed, party_style)
     if pin then
         player.meta_story.active_thread = { id = 'master_trial', params = {}, started_run = 0 }
     end
@@ -190,7 +203,7 @@ end
 -- ===========================================================================
 
 local pinned = {}
-for seed = SEED_FROM, SEED_TO do pinned[#pinned + 1] = run_seed(seed, true) end
+for seed = SEED_FROM, SEED_TO do pinned[#pinned + 1] = run_seed(seed, true, 'hurt') end
 
 local okA, failA = 0, 0
 local failSeeds, failScenes = {}, {}
@@ -244,50 +257,66 @@ end
 real_print('')
 
 -- ===========================================================================
--- Sweep B — unpinned natural selection
+-- Sweep B — unpinned natural selection, for both party styles
 -- ===========================================================================
 
-local unpinned = {}
-for seed = SEED_FROM, SEED_TO do unpinned[#unpinned + 1] = run_seed(seed, false) end
+local function unpinned_sweep(party_style)
+    local rows = {}
+    for seed = SEED_FROM, SEED_TO do
+        rows[#rows + 1] = run_seed(seed, false, party_style)
+    end
 
-local by_thread = {}
-for _, r in ipairs(unpinned) do
-    local id = r.thread or '(none)'
-    by_thread[id] = by_thread[id] or { total = 0, ok = 0 }
-    by_thread[id].total = by_thread[id].total + 1
-    if r.success then by_thread[id].ok = by_thread[id].ok + 1 end
+    local per_thread = {}
+    for _, r in ipairs(rows) do
+        local id = r.thread or '(none)'
+        per_thread[id] = per_thread[id] or { total = 0, ok = 0 }
+        per_thread[id].total = per_thread[id].total + 1
+        if r.success then per_thread[id].ok = per_thread[id].ok + 1 end
+    end
+
+    local ok = 0
+    for _, r in ipairs(rows) do if r.success then ok = ok + 1 end end
+
+    return { rows = rows, per_thread = per_thread, ok = ok, fail = #rows - ok }
 end
 
-local ids = {}
-for id in pairs(by_thread) do ids[#ids + 1] = id end
-table.sort(ids)
+for _, style in ipairs({ 'empty', 'hurt' }) do
+    local s   = unpinned_sweep(style)
+    local ids = {}
+    for id in pairs(s.per_thread) do ids[#ids + 1] = id end
+    table.sort(ids)
 
-local okB, failB = 0, 0
-for _, r in ipairs(unpinned) do
-    if r.success then okB = okB + 1 else failB = failB + 1 end
+    real_print('════════════════════════════════════════════════')
+    real_print(('UNPINNED sweep — T1 is_usable, party = %s'):format(style))
+    real_print('════════════════════════════════════════════════')
+    real_print(('Successful placements:  %d  (%s)'):format(s.ok, pct(s.ok, #s.rows)))
+    real_print(('Failed placements:      %d  (%s)'):format(s.fail, pct(s.fail, #s.rows)))
+    real_print('')
+    real_print('Per-thread:')
+    for _, id in ipairs(ids) do
+        local e = s.per_thread[id]
+        real_print(('  %-16s %2d selected, %2d ok  (%s)')
+            :format(id, e.total, e.ok, pct(e.ok, e.total)))
+    end
+    real_print('')
+
+    local mt = s.per_thread['master_trial']
+    if mt then
+        real_print(('Unpinned master_trial (%s party): %d selected, %d/%d ok (%s)')
+            :format(style, mt.total, mt.ok, mt.total, pct(mt.ok, mt.total)))
+    else
+        real_print(('Unpinned master_trial (%s party): never selected'):format(style))
+    end
+
+    local lb = s.per_thread['lost_beast']
+    if lb then
+        real_print(('Unpinned lost_beast (%s party): %d selected, %d ok (%s)')
+            :format(style, lb.total, lb.ok, pct(lb.ok, lb.total)))
+    else
+        real_print(('Unpinned lost_beast (%s party): never entered the pool — '
+            .. 'build guard excluded it'):format(style))
+    end
+    real_print('')
 end
 
-real_print('════════════════════════════════════════════════')
-real_print('UNPINNED sweep — T1 is_usable')
-real_print('════════════════════════════════════════════════')
-real_print(('Successful placements:  %d  (%s)'):format(okB, pct(okB, #unpinned)))
-real_print(('Failed placements:      %d  (%s)'):format(failB, pct(failB, #unpinned)))
-real_print('')
-real_print('Per-thread:')
-for _, id in ipairs(ids) do
-    local e = by_thread[id]
-    real_print(('  %-16s %2d selected, %2d ok  (%s)'):format(id, e.total, e.ok, pct(e.ok, e.total)))
-end
-real_print('')
-
-local mt = by_thread['master_trial']
-if mt then
-    real_print('Unpinned master_trial subset — T1 is_usable:')
-    real_print(('  master_trial selected: %d seeds'):format(mt.total))
-    real_print(('  master_trial succeeded: %d/%d (%s)'):format(mt.ok, mt.total, pct(mt.ok, mt.total)))
-    real_print('  -- baseline (T0):       34/52 (65.4%)')
-else
-    real_print('Unpinned master_trial subset: never selected')
-end
-real_print('')
 os.exit(0)
