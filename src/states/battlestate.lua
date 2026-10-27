@@ -9,6 +9,8 @@ local Sprite = require 'src.sprite'
 local Tween = require 'lib.tween'
 local Character = require 'src.character'
 local Characters = require 'src.characters'
+local Stats = require 'src.stats'
+local RivalGenerator = require 'data.story.generators.rival_generator'
 local RunState = require 'src.states.run_state'
 
 local Actions = require 'src.actions'
@@ -37,6 +39,30 @@ local function find_tile(map, offset)
         end
     end
     return false
+end
+
+-- Мастер-отряды приходят из master_generator набором дескрипторов
+-- { species, attribute, element, level }. Имена видов там не совпадают с
+-- ключами бестиария, поэтому вид ищется в три шага:
+--   1. точный ключ бестиария (src/characters/);
+--   2. пул видов по атрибуту (те же существа, что использует rival_generator);
+--   3. нил — вызывающая сторона создаст минимальный Character.
+-- Выбор по индексу, а не случайный: построение боя остаётся детерминированным.
+local function resolve_species(template_name, attribute, index)
+    if type(template_name) == 'string' and Characters[template_name] then
+        return template_name
+    end
+
+    local pools = RivalGenerator and RivalGenerator.SPECIES_POOL
+    local pool = pools and pools[attribute]
+    if pool and #pool > 0 then
+        local sorted = {}
+        for i, name in ipairs(pool) do sorted[i] = name end
+        table.sort(sorted)
+        return sorted[((index or 1) - 1) % #sorted + 1]
+    end
+
+    return nil
 end
 
 local BattleState = {}
@@ -86,6 +112,11 @@ function BattleState:init()
     self.player = nil
     self.inventory = nil
     self.level = 1
+
+    -- Story battle: runtime reference to Player.meta_story.masters[id].
+    -- Never serialized here — the master already lives in Player (R6).
+    self.master  = nil   -- nil → legacy enemy generation
+    self.enraged = false -- stored only; applied in Task B
     
     self._extra_action_available = 0
     self._extra_action_pending = false
@@ -119,6 +150,10 @@ function BattleState:enter(from, args)
 
     self.player = args.player
     self.inventory = inventory(100, 10, self.player.inventory)
+
+    -- Story battle args. `master` may be nil → legacy enemies below.
+    self.master  = args.master
+    self.enraged = args.enraged or false
 
     -- Расстановка игроков (активные)
     for i = 1, self.player.charactersActiveSize do
@@ -154,7 +189,7 @@ function BattleState:enter(from, args)
         end
     end
 
-    -- Враги
+    -- Клетки врагов (правые две колонки). Раскладка общая для обоих путей.
     local enemy_tiles = {}
     for i = 0, 1 do
         for j = 1, self.map.height do
@@ -165,20 +200,38 @@ function BattleState:enter(from, args)
         end
     end
 
-    local possibleEnemies = {}
-    for name, character in pairs(characterList) do
-        if not character.starter_character then
-            table.insert(possibleEnemies, name)
+    if self.master then
+        -- Сюжетный бой: отряд мастера берётся как есть — один юнит на
+        -- дескриптор, без фильтрации и без добивки.
+        local party = self.master.battle_party or {}
+        local spawned = 0
+        for i, desc in ipairs(party) do
+            local tile = table.remove(enemy_tiles, 1)
+            if not tile then
+                print(('[BattleState] master party wants %d enemies, only %d tiles free')
+                    :format(#party, spawned))
+                break
+            end
+            self:_spawn_enemy_from_descriptor(desc, i, tile)
+            spawned = spawned + 1
         end
-    end
+    else
+        -- Legacy: случайные враги из бестиария.
+        local possibleEnemies = {}
+        for name, character in pairs(characterList) do
+            if not character.starter_character then
+                table.insert(possibleEnemies, name)
+            end
+        end
 
-    local enemies_count = args.node and args.node.enemies_count or 2
-    for i = 1, enemies_count do
-        local tile = table.remove(enemy_tiles, math.random(1, #enemy_tiles))
-        local name = possibleEnemies[math.random(#possibleEnemies)]
-        local character = Character.new(Characters[name])
-        local u = self:add_unit(character, false, tile)
-        u.name = u.name .. ' ' .. i
+        local enemies_count = args.node and args.node.enemies_count or 2
+        for i = 1, enemies_count do
+            local tile = table.remove(enemy_tiles, math.random(1, #enemy_tiles))
+            local name = possibleEnemies[math.random(#possibleEnemies)]
+            local character = Character.new(Characters[name])
+            local u = self:add_unit(character, false, tile)
+            u.name = u.name .. ' ' .. i
+        end
     end
 
     -- Открытые клетки для игроков
@@ -298,6 +351,46 @@ function BattleState:_add_enemy_unit(character, tile)
     table.insert(self.units, unit)
     self.queue:add_actor(unit)
     self:add_object(unit)
+    return unit
+end
+
+-- Создаёт врага из дескриптора master.battle_party:
+--   { species = <string>, attribute = ..., element = ..., level = <int> }
+-- Атрибут и элемент дескриптора главнее шаблона, поэтому выставляются после
+-- Character.new. Если вид не нашёлся в бестиарии — минимальный Character
+-- с предупреждением в консоль, без падения боя.
+function BattleState:_spawn_enemy_from_descriptor(desc, index, tile)
+    index = index or 1
+    local species = resolve_species(desc.species, desc.attribute, index)
+
+    local character
+    if species then
+        character = Character.new(Characters[species])
+    else
+        print(('[BattleState] unknown creature species %q (attribute %q) — using minimal character')
+            :format(tostring(desc.species), tostring(desc.attribute)))
+        character = Character.new({
+            name      = tostring(desc.species or ('beast ' .. index)),
+            attribute = desc.attribute,
+            element   = desc.element,
+            spells    = {},
+        })
+    end
+
+    character.attribute = desc.attribute
+    character.element   = desc.element
+    character.level     = desc.level or character.level
+
+    -- Базовые запасы — через Stats без модификаторов (так же Unit:setup берёт
+    -- max_health/max_energy). Уровень пока не масштабирует статы — это Task B.
+    local baseStats = Stats(character, {}, {})
+    character.health = baseStats:get('max_health')
+    character.energy = baseStats:get('max_energy')
+
+    local unit = self:add_unit(character, false, tile)
+    if unit then
+        unit.name = unit.name .. ' ' .. index
+    end
     return unit
 end
 
