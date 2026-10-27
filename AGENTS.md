@@ -128,6 +128,13 @@ committing.
 
 ## Known issues (do not fix unless the task explicitly asks)
 
+- Placement `is_usable` accepts `{event, wild, trainer}`. Trainer nodes are
+  disposable filler (avg 16.46/map, max 20/map) and are the only node type
+  needed to reach 100% pinned-sweep placement success. Shop and rest remain
+  excluded — they are singletons (1/map) and overwriting them would cost a
+  load-bearing resource (upgrade path / only mid-run heal) for zero additional
+  seeds. T2/T3/T4 were measured and found strictly worse than T1. See
+  `tests/measure_placement` and `tests/measure_placement_tiers` for the data.
 - Story scenes are stamped onto `_generateMap`-produced nodes by
   `StoryPlacement`. There is no `_generateStoryMap`, no filler-chain insertion,
   no `_pick_filler_type`. Filler nodes are simply non-stamped nodes.

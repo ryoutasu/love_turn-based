@@ -125,6 +125,11 @@ local Threads         = require 'data.story.threads'
 local PlayerMetaStory = require 'src.player_meta_story'
 local MasterGenerator = require 'data.story.generators.master_generator'
 
+-- Node snapshots BattleState/EventState into node_gamestates at load time.
+-- The globals are installed before Levelmap loads, so the routing table is
+-- built from the same fakes Levelmap dispatches on.
+local Node            = require 'src.node'
+
 local SEED = 4242
 
 -- ---------------------------------------------------------------------------
@@ -500,6 +505,79 @@ test('A8 story nodes are event nodes with a real scene', function()
     end
 
     assert(checked > 0, 'no story nodes were placed — nothing verified')
+end)
+
+-- ===========================================================================
+-- T-routing — a trainer node overwritten by a story scene must play a scene,
+-- not start a trainer battle. Node:getGamestate maps 'trainer' -> BattleState
+-- and 'event' -> EventState, so StoryPlacement must retype the node.
+-- ===========================================================================
+
+test('T-routing trainer nodes overwritten by story route to EventState', function()
+    local examined, verified, trainer_maps = 0, 0, 0
+
+    -- Seed sweep: real generated maps rather than a hand-built node.
+    for seed = 1, 20 do
+        local player = make_player(seed)
+
+        RunState:reset(player, seed)
+        RunState.story   = { thread_id = 'master_trial', flags = {} }
+        RunState.unlocks = {}
+        player.meta_story.active_thread = {
+            id = 'master_trial', params = {}, started_run = 0,
+        }
+
+        local lm = make_levelmap(player, seed)
+        math.randomseed(seed)
+        lm:_generateMap()
+
+        -- Baseline: which node indices the legacy generator typed as trainer.
+        local was_trainer = {}
+        for i, node in ipairs(lm.nodes) do
+            if node.type == 'trainer' then was_trainer[i] = true end
+        end
+
+        lm:_place_story()
+
+        local found_here = 0
+        for i, node in ipairs(lm.nodes) do
+            if was_trainer[i] and node.story_scene then
+                found_here = found_here + 1
+                examined   = examined + 1
+
+                assert(node.type == 'event',
+                    ('seed %d node %d (%s): overwrote a trainer but type is %q, '
+                     .. 'expected "event"'):format(seed, i,
+                        tostring(node.story_scene), tostring(node.type)))
+
+                assert(node.event == nil,
+                    ('seed %d node %d (%s): overwrote a trainer but kept event=%s')
+                        :format(seed, i, tostring(node.story_scene), tostring(node.event)))
+
+                local gs = node:getGamestate()
+                assert(gs == EventState,
+                    ('seed %d node %d (%s): routes to %s, expected EventState '
+                     .. '(a trainer node would open BattleState)')
+                        :format(seed, i, tostring(node.story_scene),
+                                tostring(gs and gs.__name or gs)))
+                assert(gs ~= BattleState,
+                    ('seed %d node %d: routed to BattleState — the trainer '
+                     .. 'override leaked through'):format(seed, i))
+
+                verified = verified + 1
+            end
+        end
+        if found_here > 0 then trainer_maps = trainer_maps + 1 end
+    end
+
+    print(('         trainer nodes overwritten by story: %d across %d maps (seeds 1..20)')
+        :format(examined, trainer_maps))
+
+    assert(examined > 0,
+        'no trainer node was overwritten in seeds 1..20 — routing unverified. '
+        .. 'If is_usable no longer accepts trainer nodes, this test is vacuous.')
+    assert(verified == examined,
+        ('verified %d of %d overwritten trainer nodes'):format(verified, examined))
 end)
 
 -- ===========================================================================

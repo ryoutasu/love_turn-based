@@ -30,9 +30,11 @@ local StoryPlacement = {}
 local MERGE_REACH = 4
 
 -- Nodes that may host a story scene.
+-- T1: trainer nodes are acceptable story slots (disposable filler; see
+-- AGENTS.md placement notes). shop/rest remain excluded.
 local function is_usable(node, start_node)
     if node == start_node then return false end
-    return node.type == 'event' or node.type == 'wild'
+    return node.type == 'event' or node.type == 'wild' or node.type == 'trainer'
 end
 
 --- Map-node index: point -> node, index -> node, plus adjacency by point.
