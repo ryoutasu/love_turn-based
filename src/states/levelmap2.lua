@@ -311,14 +311,31 @@ end
 -- Serialization
 -- ================================================================
 
+-- Story node fields are saved per node, and only for story nodes, so legacy
+-- saves stay compact.
+-- Without story fields, deserialize leaves story nodes as generic
+-- event nodes because _place_story is not re-run on load (see AGENTS.md).
 function Levelmap:serialize()
     local nodeStates = {}
     for i, node in ipairs(self.nodes) do
-        nodeStates[i] = {
+        local state = {
             isOpen       = node.isOpen       or false,
             isCompleted  = node.isCompleted  or false,
             isDiscovered = node.isDiscovered or false,
         }
+
+        if node.story_scene then
+            state.story_id        = node.story_id
+            state.story_scene     = node.story_scene
+            state.is_master_boss  = node.is_master_boss
+            state.is_boss         = node.is_boss
+            state.alt_when_locked = node.alt_when_locked
+            state.locked_hint     = node.locked_hint
+            state.requires        = node.requires
+            state.grants          = node.grants
+        end
+
+        nodeStates[i] = state
     end
 
     local pathStates = {}
@@ -353,6 +370,22 @@ function Levelmap:deserialize(data)
             node.isOpen       = state.isOpen       or false
             node.isCompleted  = state.isCompleted  or false
             node.isDiscovered = state.isDiscovered or false
+
+            -- Сюжетная личность узла берётся из сейва, а не из повторной
+            -- раскладки: _place_story здесь нарочно не вызывается.
+            -- Старые сейвы без этих полей остаются как есть.
+            if state.story_scene then
+                node.story_id        = state.story_id
+                node.story_scene     = state.story_scene
+                node.is_master_boss  = state.is_master_boss
+                node.is_boss         = state.is_boss
+                node.alt_when_locked = state.alt_when_locked
+                node.locked_hint     = state.locked_hint
+                node.requires        = state.requires
+                node.grants          = state.grants
+                node.type            = 'event'   -- matches StoryPlacement
+                node.event           = nil       -- story scenes are not random events
+            end
         end
     end
 
