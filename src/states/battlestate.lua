@@ -234,6 +234,17 @@ function BattleState:enter(from, args)
         end
     end
 
+    -- Ярость мастера: те же боевые модификаторы на каждого врага.
+    -- Действует только в сюжетном бою и только при enraged — на
+    -- legacy-путь и на юнитов игрока не распространяется.
+    if self.master and self.enraged then
+        for _, unit in ipairs(self.units) do
+            if not unit.is_player then
+                self:_apply_enraged(unit)
+            end
+        end
+    end
+
     -- Открытые клетки для игроков
     for _, tile in pairs(self.map.tiles._props) do
         if tile.tx <= 2 then
@@ -392,6 +403,36 @@ function BattleState:_spawn_enemy_from_descriptor(desc, index, tile)
         unit.name = unit.name .. ' ' .. index
     end
     return unit
+end
+
+-- Ярость мастера: battle-scope модификаторы на одного врага.
+-- Только damage и max_health — initiative и броня не трогаются, чтобы
+-- поведение ActorQueue осталось прежним. Значения идут через Unit:addModifier,
+-- то есть через агрегацию Stats (unit.modifiers → Stats:get()), а не правкой
+-- character.* или unit.stats напрямую.
+function BattleState:_apply_enraged(unit)
+    if unit.is_player then return end
+
+    local enragedModifiers = {
+        -- ENRAGED_TUNING: damage ×1.15, max_health ×1.10
+        { id = 'master_enraged_damage', stat = 'damage',     op = 'mul', value = 1.15 },
+        { id = 'master_enraged_health', stat = 'max_health', op = 'mul', value = 1.10 },
+    }
+
+    for _, mod in ipairs(enragedModifiers) do
+        unit:addModifier({
+            id     = mod.id,
+            scope  = 'battle',
+            stat   = mod.stat,
+            op     = mod.op,
+            value  = mod.value,
+            source = 'master_enraged',
+        })
+    end
+
+    -- После подъёма max_health текущее здоровье выводится на новый максимум,
+    -- чтобы враг не стартовал бой «уже раненым».
+    unit.health = unit.stats:get('max_health')
 end
 
 function BattleState:remove_unit(unit)

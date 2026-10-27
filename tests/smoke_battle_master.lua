@@ -144,6 +144,7 @@ RunState.hasUnlock    = function() return false end
 -- ---------------------------------------------------------------------------
 
 BattleState     = require 'src.states.battlestate'
+local Character       = require 'src.character'
 local Characters      = require 'src.characters'
 local PlayerMetaStory = require 'src.player_meta_story'
 local MasterGenerator = require 'data.story.generators.master_generator'
@@ -182,6 +183,40 @@ local function enemy_units(battle)
         end
     end
     return list
+end
+
+local function player_units(battle)
+    local list = {}
+    for _, unit in ipairs(battle.units) do
+        if unit.is_player then
+            list[#list + 1] = unit
+        end
+    end
+    return list
+end
+
+local FLOAT_TOLERANCE = 1e-6
+
+local function near(a, b, tolerance)
+    return math.abs(a - b) <= (tolerance or FLOAT_TOLERANCE)
+end
+
+-- Asserts that `enraged` equals `normal` with `factor` applied, reporting the
+-- effective Stats values on failure. When `normal` is 0 — a fallback creature
+-- built without base stats — the check stays a real assertion: Stats:_compute
+-- evaluates `(0 + 0) * mul`, which is 0 in Lua. That case is printed so the
+-- content gap stays visible instead of being silently skipped.
+local function assert_scaled(label, normal, enraged, factor)
+    local expected = normal * factor
+    if normal ~= 0 then
+        assert(near(enraged, expected),
+            ('%s: expected %f (%f x %g), got %f')
+                :format(label, expected, normal, factor, enraged))
+        return
+    end
+    assert(enraged == 0,
+        ('%s: baseline is 0 but enraged value is %f'):format(label, enraged))
+    print(('  note %s: no base stat, enraged value is also 0'):format(label))
 end
 
 local function current_master(seed)
@@ -295,6 +330,129 @@ local function test_enraged()
 end
 
 -- ---------------------------------------------------------------------------
+-- Test 4: enraged multiplies enemy damage and max_health through Stats
+-- ---------------------------------------------------------------------------
+
+local function test_enraged_enemy_stats()
+    -- Seeds 1 (wild) and 4 (mechanic) resolve to the same templates in the calm
+    -- and the enraged battle, so any stat difference comes from the modifiers.
+    for _, seed in ipairs({ 1, 4 }) do
+        local m = current_master(seed)
+        local node = { enemies_count = 2, level = 1 }
+
+        local calm  = build_battle({ player = make_player(), node = node,
+                                     master = m, enraged = false })
+        local angry = build_battle({ player = make_player(), node = node,
+                                     master = m, enraged = true })
+
+        local calm_enemies  = enemy_units(calm)
+        local angry_enemies = enemy_units(angry)
+        assert(#angry_enemies == #calm_enemies, 'enraged changed the enemy count')
+
+        for i = 1, #calm_enemies do
+            local normal  = calm_enemies[i]
+            local enraged = angry_enemies[i]
+
+            -- Effective values come from Stats, not from the modifier table:
+            -- that is what proves the modifiers went through aggregation.
+            local dmg_normal  = normal.stats:get('damage')
+            local hp_normal   = normal.stats:get('max_health')
+            local dmg_enraged = enraged.stats:get('damage')
+            local hp_enraged  = enraged.stats:get('max_health')
+
+            assert_scaled(('seed %d unit %d damage'):format(seed, i),
+                dmg_normal, dmg_enraged, 1.15)
+            assert_scaled(('seed %d unit %d max_health'):format(seed, i),
+                hp_normal, hp_enraged, 1.10)
+
+            -- Current health was restored to the new max for enraged units.
+            assert(near(enraged.health, enraged.stats:get('max_health')),
+                ('seed %d unit %d health: expected %f (current max), got %f')
+                    :format(seed, i, enraged.stats:get('max_health'), enraged.health))
+
+            -- Both modifiers are battle-scope, from master_enraged.
+            local battle_mods = 0
+            for _, mod in ipairs(enraged.modifiers) do
+                if mod.source == 'master_enraged' then
+                    assert(mod.scope == 'battle',
+                        ('seed %d unit %d: modifier %q has scope %q, expected battle')
+                            :format(seed, i, tostring(mod.id), tostring(mod.scope)))
+                    battle_mods = battle_mods + 1
+                end
+            end
+            assert(battle_mods == 2,
+                ('seed %d unit %d: expected 2 master_enraged modifiers, got %d')
+                    :format(seed, i, battle_mods))
+        end
+
+        -- Calm battle: no master_enraged modifier anywhere.
+        for i, unit in ipairs(calm_enemies) do
+            for _, mod in ipairs(unit.modifiers) do
+                assert(mod.source ~= 'master_enraged',
+                    ('seed %d calm unit %d: unexpected enraged modifier'):format(seed, i))
+            end
+        end
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Test 5: enraged does not leak into the player's units
+-- ---------------------------------------------------------------------------
+
+local function test_enraged_player_untouched()
+    local m = current_master(1)
+    local node = { enemies_count = 2, level = 1 }
+
+    -- Give the player a real unit on both sides, so there is something to
+    -- leak into and the comparison is not vacuous.
+    local function seeded_player()
+        local p = make_player()
+        p.charactersActive[1] = Character.new(Characters.Emberpuff)
+        p.charactersActiveSize = 1
+        return p
+    end
+
+    local calm  = build_battle({ player = seeded_player(), node = node,
+                                 master = m, enraged = false })
+    local angry = build_battle({ player = seeded_player(), node = node,
+                                 master = m, enraged = true })
+
+    local calm_players  = player_units(calm)
+    local angry_players = player_units(angry)
+
+    assert(#calm_players > 0, 'player has no units — leakage test is vacuous')
+    assert(#calm_players == #angry_players, 'player unit count changed')
+
+    for i = 1, #calm_players do
+        local normal  = calm_players[i]
+        local enraged = angry_players[i]
+
+        assert(near(enraged.stats:get('damage'), normal.stats:get('damage')),
+            ('player unit %d damage changed: %f -> %f')
+                :format(i, normal.stats:get('damage'), enraged.stats:get('damage')))
+        assert(near(enraged.stats:get('max_health'), normal.stats:get('max_health')),
+            ('player unit %d max_health changed: %f -> %f')
+                :format(i, normal.stats:get('max_health'), enraged.stats:get('max_health')))
+        assert(near(enraged.health, normal.health),
+            ('player unit %d current health changed: %f -> %f')
+                :format(i, normal.health, enraged.health))
+
+        for _, mod in ipairs(enraged.modifiers) do
+            assert(mod.source ~= 'master_enraged',
+                ('player unit %d received an enraged modifier'):format(i))
+        end
+    end
+
+    -- Sanity: enemies in that same battle did get the modifiers, so the
+    -- player comparison above is not trivially passing.
+    local angry_enemies = enemy_units(angry)
+    local calm_enemies  = enemy_units(calm)
+    assert(near(angry_enemies[1].stats:get('damage'),
+                calm_enemies[1].stats:get('damage') * 1.15),
+        'enemies in the leakage battle were not enraged — test is vacuous')
+end
+
+-- ---------------------------------------------------------------------------
 -- Run
 -- ---------------------------------------------------------------------------
 
@@ -302,6 +460,8 @@ local tests = {
     { 'master party from descriptors', test_master_party },
     { 'legacy path with master = nil',  test_legacy_path },
     { 'enraged stored, party unchanged', test_enraged },
+    { 'enraged scales enemy stats via Stats', test_enraged_enemy_stats },
+    { 'enraged leaves player units alone',    test_enraged_player_untouched },
 }
 
 local failed = 0
