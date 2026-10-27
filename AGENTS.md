@@ -109,6 +109,13 @@ src/
 - `git diff` must be reviewed before committing. Revert if the agent touched
   files outside the task's declared scope.
 
+## Git hygiene
+
+Tracked path is `AGENTS.md` (uppercase). On case-sensitive git (Git Bash on
+Windows, WSL, Linux, macOS), `git add -- agents.md` may silently match nothing.
+Always use `git add -- AGENTS.md` and verify with `git show --stat HEAD` after
+committing.
+
 ## Workflow per task
 
 1. **Read** this file, then `specs.md`, then the declared source files.
