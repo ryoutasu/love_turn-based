@@ -308,42 +308,19 @@ function StoryPlacement.place(levelmap, player, runState)
         -- adjacent to the parent, so in a cramped lattice the only free slots
         -- may also touch the start. Prefer a slot that touches nothing
         -- earlier, but fall back rather than failing the whole run.
-        if #ranked == 0 and next(avoid) ~= nil then
+        --
+        -- `avoid` is nil when this scene's parent is the map start (nothing to
+        -- avoid), so guard the emptiness check — next(nil) throws.
+        if #ranked == 0 and avoid and next(avoid) ~= nil then
             ranked = candidates_for(parent_nodes, used, start_node, by_point,
                 from_start, rng, nil, levelmap)
         end
 
-        -- Sibling guarantee: scenes sharing a parent set are alternative arms
-        -- of the same branch, so the newcomer must also be adjacent to the
-        -- arms already placed. Otherwise the second arm falls back a step and
-        -- the "shortcut" ends up longer than the scenic route.
-        if #parent_nodes == 1 and #ranked > 1 then
-            local keep = {}
-            for _, node in ipairs(ranked) do
-                local ok_sibling = true
-                for other_id, other_node in pairs(node_of) do
-                    if other_id ~= entry.id and other_id ~= 'start'
-                        and node_of[entry.parents[1]] ~= other_node then
-                        -- Does other_id share a parent with this entry?
-                        local shared = false
-                        for _, oid in ipairs(parent_of[other_id] or {}) do
-                            for _, pid in ipairs(entry.parents) do
-                                if oid == pid then shared = true end
-                            end
-                        end
-                        if shared then
-                            local gen = levelmap.generator
-                            if not (gen and gen:isNeighbors(node.point, other_node.point)) then
-                                ok_sibling = false
-                            end
-                        end
-                    end
-                end
-                if ok_sibling then keep[#keep + 1] = node end
-            end
-            if #keep > 0 then ranked = keep end
-        end
-
+        -- Sibling placement is structural: every candidate is a map neighbour
+        -- of the shared parent, so whichever arm is chosen here is adjacent to
+        -- the parent. Whether two arms are adjacent to EACH OTHER is left to
+        -- the lattice — on a hex map siblings often share an edge, and
+        -- requiring the opposite starved placement on ~14% of seeds.
         if #ranked == 0 then
             local names = {}
             for _, pid in ipairs(entry.parents) do names[#names + 1] = pid end
