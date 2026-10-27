@@ -267,9 +267,9 @@ test('T1 story node identity survives serialize -> deserialize', function()
     local story_count = count_story_nodes(lm)
     assert(story_count > 0,
         'fixture placed no story nodes — _place_story did not stamp anything')
-    assert(count_master_boss(lm) == 2,
-        ('fixture must place exactly 2 master-boss nodes before saving, got %d '
-         .. '(master_trial has nodes `boss` and `boss_angry`, both is_boss)')
+    assert(count_master_boss(lm) == 1,
+        ('fixture must place exactly 1 master-boss node before saving, got %d '
+         .. '(boss_angry is an alt_when_locked scene variant, not a node)')
             :format(count_master_boss(lm)))
 
     local before    = snapshot(lm)
@@ -307,7 +307,7 @@ end)
 
 test('T2 the master-boss node survives restore', function()
     local lm = build_story_map(make_player())
-    assert(count_master_boss(lm) == 2, 'fixture precondition failed')
+    assert(count_master_boss(lm) == 1, 'fixture precondition failed')
 
     local saved    = lm:serialize()
     local restored = make_levelmap(make_player())
@@ -322,26 +322,19 @@ test('T2 the master-boss node survives restore', function()
         if node.is_master_boss then bosses[#bosses + 1] = node end
     end
 
-    assert(#bosses == 2,
-        ('exactly 2 nodes must have is_master_boss == true after restore, got %d '
+    assert(#bosses == 1,
+        ('exactly 1 node must have is_master_boss == true after restore, got %d '
          .. '(0 = the original soft-lock: story identity was lost)'):format(#bosses))
 
-    local scenes = {}
-    for _, node in ipairs(bosses) do scenes[node.story_scene] = true end
-    assert(scenes['master_boss'],
-        'restored boss node must still point at scene master_boss')
-    assert(scenes['master_boss_angry'],
-        'restored boss_angry node must still point at scene master_boss_angry')
-
-    -- The gated boss must stay gated, otherwise it can never go enraged.
-    local gated
-    for _, node in ipairs(bosses) do
-        if node.story_id == 'boss' then gated = node end
-    end
-    assert(gated, 'restored set must contain the story_id "boss" node')
+    -- boss_angry is a scene variant reached through alt_when_locked, not a
+    -- second map node, so only master_boss may carry a boss flag.
+    local gated = bosses[1]
+    assert(gated.story_scene == 'master_boss',
+        ('restored boss node must point at scene master_boss, got %q')
+            :format(tostring(gated.story_scene)))
     assert(same_table(gated.requires, { run_key = 'dojo_key' }),
         'restored boss node must keep its run_key gate')
-    assert(gated.alt_when_locked == 'boss_angry',
+    assert(gated.alt_when_locked == 'master_boss_angry',
         ('restored boss node must keep alt_when_locked, got %q')
             :format(tostring(gated.alt_when_locked)))
 end)

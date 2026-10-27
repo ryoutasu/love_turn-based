@@ -121,13 +121,32 @@ src/
 
 ## Known issues (do not fix unless the task explicitly asks)
 
-- `Levelmap:_pick_filler_type()` can return `'event'`, but filler `event` nodes
-  have `node.event = nil` → `EventState` will crash on open. Currently the
-  filler types are `wild/trainer/rest` only. Do not re-enable `'event'` until
-  the filler-event wiring task is scheduled.
-- `BattleState` does not yet accept `master.battle_party` (Task A).
-- `enraged` flag is stored on `RunState.story.flags.boss_enraged` but not yet
-  applied as modifiers (Task B).
+- Story scenes are stamped onto `_generateMap`-produced nodes by
+  `StoryPlacement`. There is no `_generateStoryMap`, no filler-chain insertion,
+  no `_pick_filler_type`. Filler nodes are simply non-stamped nodes.
+- Hex map topology: a scene's map neighbours may include the node its parent was
+  placed on (grandparent adjacency). **Equal BFS depth for sibling branches is
+  NOT guaranteed and is not a valid invariant.** What is guaranteed:
+  (1) sibling branches are adjacent to the shared parent (locality of choice),
+  (2) at least one arm of a fork is not adjacent to the map start (so the fork
+  scene can always be played if the player chooses that route).
+  Verify via `smoke_story_placement` (A6', A6''', A6b).
+- Bypass: an arm may be adjacent to the map start, allowing the player to skip
+  the fork scene (crossroads). The choice is still meaningful (routes differ),
+  but the narrative moment can be missed. If narrative enforcement becomes
+  required, add a `{ visited_scene = '<scene_id>' }` gate to the arm — currently
+  not implemented.
+- `scene_graph.validate` treats `alt_when_locked` as a **scene id**, not a graph
+  node id. It is NOT a graph edge. A node's `alt_when_locked` field is resolved
+  by `Node:resolve_scene_id` via `Scenes[<id>]`, not by walking the graph. Do not
+  point `alt_when_locked` at another graph node — collapse the fallback into the
+  primary node (see `master_trial.boss`).
+
+## Adjacency
+
+Map adjacency has one authoritative source: `generator:isNeighbors`.
+Placement (`StoryPlacement`) and the placement test both use it. Any change to
+placement adjacency must update the test in the same commit.
 
 ## Definition of "done"
 

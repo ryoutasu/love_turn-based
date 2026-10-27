@@ -26,14 +26,17 @@ return {
     --   crossroads -> branches { shortcut, scenic }
     --   shortcut (gate) -> boss
     --   scenic (find_key, grants run_key) -> boss
-    --   boss: is_boss, requires run_key, alt_when_locked = boss_angry
-    --   boss_angry: is_boss (harsher encounter — see scene)
+    --   boss: is_boss, requires run_key, alt_when_locked = master_boss_angry
     --
     -- Narrative intent:
     --   * Shortcut = fewer nodes, but you arrive at the gate with nothing.
     --   * Scenic  = one extra node, but you pick up the key on the way.
     --   * If the player is impatient, the boss is angry (alt_when_locked).
     --   * If the player explores, the boss is normal.
+    --
+    -- alt_when_locked is a SCENE id, not a graph node id: Node:resolve_scene_id
+    -- returns it verbatim and the caller looks it up in Scenes[]. The angry
+    -- boss is a variant of this node, not a second node on the map.
     build = function(ctx)
         local m = ctx.master
         if not m then return nil end
@@ -60,11 +63,7 @@ return {
                 scene           = 'master_boss',
                 is_boss         = true,
                 requires        = { run_key = 'dojo_key' },
-                alt_when_locked = 'boss_angry',
-            },
-            boss_angry = {
-                scene   = 'master_boss_angry',
-                is_boss = true,
+                alt_when_locked = 'master_boss_angry',
             },
         }
     end,
