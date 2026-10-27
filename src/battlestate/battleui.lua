@@ -157,15 +157,24 @@ function BattleUI:drawUnitInfo(unit)
         UI.nextPosition("BOTTOMLEFT")
     end
 
-    -- Способности
+    -- Способности. Показываем элемент и цену — иначе игрок не может
+    -- осмысленно выбирать между физическим и стихийным уроном.
     UI.text(0, 10, "Spells:", "TOPLEFT", { 0.85, 0.85, 0.85, 1 }, infoFont)
     UI.nextPosition("BOTTOMLEFT", _, 8, 2)
 
     for _, spell in ipairs(unit.spells or {}) do
         local cd     = spell.current_cooldown or 0
         local suffix = cd > 0 and (" (CD: " .. cd .. ")") or ""
-        UI.text(0, 2, "\226\128\162 " .. (spell.name or "?") .. suffix,
-            "TOPLEFT", { 1, 1, 1, 1 }, infoSmallFont)
+
+        local elem_label = (ELEMENTS and ELEMENTS[spell.element]) or nil
+        local elem_color = (ELEMENTS_COLORS and ELEMENTS_COLORS[spell.element]) or { 0.8, 0.8, 0.8, 1 }
+        local cost = spell.cost and (" [" .. spell.cost .. "]") or ""
+
+        UI.text(0, 2, {
+            { 1, 1, 1, 1 }, "\226\128\162 " .. (spell.name or "?") .. cost,
+            elem_color,     elem_label and (" " .. elem_label) or "",
+            { 0.7, 0.7, 0.7, 1 }, suffix,
+        }, "TOPLEFT", nil, infoSmallFont)
         UI.nextPosition("BOTTOMLEFT")
     end
 

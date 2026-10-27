@@ -172,42 +172,61 @@ Upgrades['master_mechanic'] = {
 
 Upgrades['element_mastery_fire'] = {
     id = 'element_mastery_fire',
-    name = 'Fire Mastery',
-    description = 'Fire-element spells deal +25% damage.',
+    name = 'Ember Mastery',
+    description = 'Ember spells deal +25% damage.',
     icon = 'icons/element_fire.png',
     rarity = 'uncommon',
-    tags = { 'element', 'fire' },
+    tags = { 'element', 'ember' },
     mods = {
-        -- spell_power is used by the damage calculator for spells
-        { stat = 'spell_power', op = 'mul', value = 1.25, filter_elem = 'fire' },
+        -- Точечный стат: читается калькулятором урона как spell_power_<элемент>.
+        -- Раньше здесь было `filter_elem`, которое никто не читал, а `spell_power`
+        -- был сломан (база 0 → умножение обнуляло урон).
+        { stat = 'spell_power_ember', op = 'mul', value = 1.25 },
     },
 }
 
 Upgrades['element_mastery_water'] = {
     id = 'element_mastery_water',
     name = 'Water Mastery',
-    description = 'Water-element spells deal +25% damage.',
+    description = 'Water spells deal +25% damage.',
     icon = 'icons/element_water.png',
     rarity = 'uncommon',
     tags = { 'element', 'water' },
     mods = {
-        { stat = 'spell_power', op = 'mul', value = 1.25, filter_elem = 'water' },
+        { stat = 'spell_power_water', op = 'mul', value = 1.25 },
+    },
+}
+
+Upgrades['element_mastery_storm'] = {
+    id = 'element_mastery_storm',
+    name = 'Storm Mastery',
+    description = 'Storm spells deal +25% damage.',
+    icon = 'icons/element_storm.png',
+    rarity = 'uncommon',
+    tags = { 'element', 'storm' },
+    mods = {
+        { stat = 'spell_power_storm', op = 'mul', value = 1.25 },
     },
 }
 
 Upgrades['element_mastery_ice'] = {
     id = 'element_mastery_ice',
-    name = 'Ice Mastery',
-    description = 'Ice-element spells apply Slow for 2 turns.',
+    name = 'Frost Mastery',
+    description = 'Water spells slow the target: -2 initiative for 2 turns.',
     icon = 'icons/element_ice.png',
     rarity = 'uncommon',
-    tags = { 'element', 'ice' },
+    tags = { 'element', 'water' },
     mods = {},  -- implemented via on_spell_hit hook
     hooks = {
         on_spell_hit = function(target, spell)
-            if spell.element == 'ice' then
+            -- 'ice' не существует в этой игре: вода — это вода.
+            -- Ветка была мёртвой, потому что элемента 'ice' нет ни у одного
+            -- заклинания (проверено по src/spells).
+            if not target or not target.addModifier then return end
+            if spell.element == 'water' then
                 target:addModifier({
-                    id = 'slow_'..target.name,
+                    id = 'slow_water',
+                    name = 'Slowed',
                     scope = 'battle',
                     stat = 'initiative',
                     op = 'add',
@@ -719,9 +738,17 @@ Upgrades['blood_deal'] = {
     hooks = {
         on_battle_start = function(battle)
             for _, unit in ipairs(battle.units) do
-                if unit.is_player then
+                -- Только боевые (не запасные) юниты игрока: spare не ходят
+                -- в бою, и вычитать им HP за «участие» несправедливо.
+                if unit.is_player and not unit.spare then
                     local loss = math.floor(unit.max_health * 0.05)
-                    unit:take_damage(nil, loss, false)
+                    -- Чистый урон: source = nil. Раньше здесь вызывался
+                    -- take_damage(nil, ...), и калькулятор падал на
+                    -- source.attribute при первом же бое с этим апгрейдом.
+                    unit:change_health(-loss)
+                    if Tagtext and unit.x then
+                        Tagtext:add('-' .. loss, unit.x + 5, unit.y - 40, 2, 30, { 0.8, 0.2, 0.2 })
+                    end
                 end
             end
         end,

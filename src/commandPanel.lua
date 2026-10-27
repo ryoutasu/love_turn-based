@@ -46,10 +46,20 @@ function CommandPanel:update(dt)
         local spells = actor:get_spells()
         if spells then
             for i, spell in pairs(spells) do
+                -- В кнопке показываем элемент и цену: игрок должен понимать,
+                -- чем он бьёт, не открывая окно статов.
+                local elem_label = (ELEMENTS and ELEMENTS[spell.element]) or spell.element
                 local text = spell.name
+                if elem_label and spell.element and spell.element ~= 'neutral' then
+                    text = text .. ' [' .. elem_label .. ']'
+                end
+
                 local disabled = false
                 if spell.current_cooldown > 0 then
                     text = text .. ' : ' .. tonumber(spell.current_cooldown)
+                    disabled = true
+                elseif spell.cost and actor.energy and actor.energy < spell.cost then
+                    -- Не хватает энергии — кнопка неактивна, а не «молча ничего».
                     disabled = true
                 end
 

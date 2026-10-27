@@ -3,7 +3,11 @@ ATTRIBUTES = {
     mystic = "Mystic",
     mechanic = "Mechanic",
     ancient = "Ancient",
-    chaotic = "Chaotic"
+    -- Ключ должен совпадать с игровым ('chaos'): везде в коде —
+    -- SHARD_TYPES, data/type_chart.lua, character_pool — используется 'chaos'.
+    -- Раньше здесь стояло 'chaotic', и метка Chaos никогда не находилась
+    -- (в UI показывался сырой ключ или nil).
+    chaos = "Chaos"
 }
 
 ELEMENTS = {
@@ -13,5 +17,8 @@ ELEMENTS = {
     storm = "Storm",
     light = "Light",
     dark = "Dark",
-    plant = "Plant"
+    plant = "Plant",
+    -- «Нейтральный» урон: используется заклинаниями claws/sand_throw/healing.
+    -- Без этой строки UI показывал бы сырой ключ 'neutral'.
+    neutral = "Neutral"
 }

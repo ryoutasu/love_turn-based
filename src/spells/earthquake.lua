@@ -1,4 +1,4 @@
--- local animation = require 'src.animation'
+﻿-- local animation = require 'src.animation'
 
 -- local Cast = Class{}
 
@@ -74,7 +74,7 @@ return {
         local tiles = BattleState.pathfinder:getTilesInRange(target, spellcast.spell.radius)
         for index, tile in ipairs(tiles) do
             if tile.actor then
-                tile.actor:take_damage(caster, spellcast.spell.damage)
+                spellcast:dealDamage(tile.actor)
             end
         end
         spellcast:complete()

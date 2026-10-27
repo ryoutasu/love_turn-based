@@ -1,4 +1,4 @@
--- local animation = require 'src.animation'
+﻿-- local animation = require 'src.animation'
 
 -- local Cast = Class{}
 
@@ -87,7 +87,7 @@ return {
         effect:setOnComplete(function ()
             for _, tile in pairs(BattleState.map.tiles._props) do
                 if tile.aoe_target and tile.actor and not tile.actor.is_player then
-                    tile.actor:take_damage(caster, 10)
+                    spellcast:dealDamage(tile.actor, 10)
                     -- tile.actor:add_status_effect({
                     --     name = 'Frost Slow',
                     --     duration = 3,

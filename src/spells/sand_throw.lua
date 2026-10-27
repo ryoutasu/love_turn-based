@@ -133,14 +133,17 @@ return {
             particle.system:pause()
             particle:remove()
             
-            target.miss_chance = target.miss_chance + 0.25
-            target:add_status_effect({
-                name = 'Sand Throw',
-                duration = 5,
-                target = target,
-                caster = caster,
-                on_tick = function() end,
-                on_expire = function(self) self.target.miss_chance = self.target.miss_chance - 0.25 end
+            -- Через модификатор, а не прямой записью в поле: иначе бонус
+            -- не проходит через Stats и не снимается корректно.
+            target:addModifier({
+                id = 'sand_throw_miss',
+                name = 'Blinded',
+                scope = 'battle',
+                stat = 'miss_chance',
+                op = 'add',
+                value = 0.25,
+                duration = { type = 'turn', value = 5 },
+                stack = 'refresh',
             })
 
             spellcast:complete()

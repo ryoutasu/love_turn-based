@@ -1,4 +1,4 @@
--- local tween = require 'lib.tween'
+﻿-- local tween = require 'lib.tween'
 
 -- local imageData = love.image.newImageData(1, 1)
 -- imageData:setPixel(0,0, 1,1,1,1)
@@ -148,7 +148,7 @@ return {
             particle3.system:emit(800)
             particle3:remove()
 
-            target:take_damage(caster, 100)
+            spellcast:dealDamage(target)
 
             spellcast:complete()
         end)

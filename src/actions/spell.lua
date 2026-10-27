@@ -28,7 +28,9 @@ function Spell:init(actor, spell, target)
     self.spellcast = Spellcast(actor, target, spell)
 
     if spell.cooldown then
-        spell.current_cooldown = spell.cooldown + 1
+        -- cooldown_mod — надбавка от Dark Pact. Раньше писался в объект
+        -- заклинания на юните, но здесь не читался: проклятие было пустышкой.
+        spell.current_cooldown = spell.cooldown + (spell.cooldown_mod or 0) + 1
     end
 
     if not spell.expirience then
@@ -79,11 +81,17 @@ function Spell:update(dt)
     self.spellcast:update(dt)
     complete = self.spellcast.isCompleted
     
-    RunState:fireHook('on_spell_hit', self.target, self)
+    -- Хук on_spell_hit должен срабатывать ОДИН раз на каст, уже после
+    -- того как снаряд долетел, и получать юнита (а не тайл) с элементом.
+    -- Раньше он вызывался каждый кадр и с тайлом вместо цели — из-за этого
+    -- element_mastery_ice накладывал Slow на тайл и в никуда.
+    if complete and not self._hook_fired then
+        self._hook_fired = true
+        local victim = self.spellcast.target
+        RunState:fireHook('on_spell_hit', victim, self.spell)
 
-    if complete then
-        if self.target.set_animation then
-            self.target:set_animation()
+        if victim and victim.set_animation then
+            victim:set_animation()
         end
     end
 

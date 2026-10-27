@@ -185,7 +185,9 @@ return {
                 caster = caster,
                 on_tick = function(self)
                     local tick_damage = 3
-                    self.target:take_damage(caster, tick_damage)
+                    -- Горение — это урон огнём, а не «чистый» урон:
+                    -- иначе plant-цели не получают штраф, а ember-цели — нет.
+                    self.target:take_damage(caster, tick_damage, false, 'ember', { is_spell = true })
 
                     local burn_particle = SeparateParticles(image, 1000)
                     burn_particle:setPosition(self.target:bottom())

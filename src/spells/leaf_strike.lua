@@ -1,4 +1,4 @@
--- local animation = require 'src.animation'
+﻿-- local animation = require 'src.animation'
 
 -- local multiplier = 1.2
 
@@ -87,7 +87,7 @@ return {
         local dx, dy = target.x - caster.x, target.y - caster.y
         local effect = VisualEffect(SimpleSwoosh(), { x = x, y = y, r = math.atan2(dy, dx), sx = 1, sy = 2, color = { 0, 1, 0, 1 } } )
         effect:setOnComplete(function ()
-            target:take_damage(caster, spellcast.spell.damage)
+            spellcast:dealDamage(target)
             caster:heal(8)
             spellcast:complete()
         end)

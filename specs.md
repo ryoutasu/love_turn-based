@@ -55,30 +55,91 @@
 | `ancient` | Нейтральный (сильные способности) |
 | `chaos` | Нейтральный (непредсказуемые) |
 
-Треугольник: **Wild > Mystic > Mechanic > Wild**. Ancient и Chaos — нейтральны.
+Треугольник: **Wild > Mystic > Mechanic > Wild** (взаимно, ×1.5 / ×0.5).
+
+Ancient и Chaos не «нейтральны» — у них есть собственный обмен, иначе это был бы
+бесплатный апгрейд:
+
+| Пара | Множитель | Смысл |
+|---|---|---|
+| `ancient` → `chaos` | ×1.5 | Ancient пробивает Chaos |
+| `ancient` → `wild`/`mystic`/`mechanic` | ×0.75 | Ancient уязвим ко всему обычному |
+| `chaos` → `ancient` | ×0.5 | Chaos сопротивляется Ancient |
+| `chaos` → обычные | ×1.0 | Chaos нейтрален |
 
 **Осколки (shards)** дропаются по атрибутам убитых врагов → используются для крафта. Пять типов осколков в `Player.shards[attr]`.
 
-### 3.3. Элементы (7)
+> ⚠️ **Контентный пробел:** существа в `src/characters/` сейчас имеют только
+> `wild` (7) и `mystic` (7) — ни одного `mechanic`/`ancient`/`chaos`.
+> Поэтому осколки этих трёх типов невозможно получить, а targeted-крафт
+> для них возвращает `nil`. Чарт уже готов — нужны существа.
 
-`ember`, `water`, `earth`, `storm`, `light`, `dark`, `plant`.
+### 3.3. Элементы (8)
 
-Взаимодействия в `data/type_chart.lua`:
-- Ember > Earth > Storm > Water > Ember.
-- Light ↔ Dark (×2 друг против друга).
-- Ember, Storm > Plant > Water, Earth.
+`ember`, `water`, `earth`, `storm`, `light`, `dark`, `plant` + служебный `neutral`.
 
-**Атрибут × Элемент = два независимых множителя урона** (по модели Digimon). Может быть до ×4 урона.
+Взаимодействия в `data/type_chart.lua` (матрица заполнена полностью, 7×7 + neutral):
+
+| Правило | Множитель |
+|---|---|
+| Ember > Earth, Plant | ×1.5 |
+| Earth > Storm | ×1.5 |
+| Storm > Water, Plant | ×1.5 |
+| Water > Ember; Plant > Water, Earth | ×1.5 |
+| Light ↔ Dark | ×2.0 (взаимно) |
+| Своя стихия против своей | ×0.5 |
+| `neutral` против чего угодно | ×1.0 |
+
+`neutral` — это «физический» урон заклинаний `claws`, `sand_throw`, `healing`.
+Строка и столбец существуют, чтобы горячий путь не проверял `nil`.
+**STAB на `neutral` не выдаётся** — иначе любой нейтральный спелл получал бы +50% бесплатно.
+
+**Атрибут × Элемент = два независимых множителя урона** (по модели Digimon).
+Максимум без баффов: ×1.5 (атрибут) × ×2.0 (элемент) × ×1.5 (STAB) = **×4.5**.
 
 ### 3.4. Урон
 
-`src/damage_calculator.lua`:
+`src/damage_calculator.lua` — семь шагов, в этом же порядке:
+
 ```
-final = base_damage - armor
-      × attr_multiplier(attacker.attr, defender.attr)
-      × elem_multiplier(spell.element or attacker.element, defender.element)
+damage = base
+       × attr_mul            -- атрибут атакующего vs атрибут цели
+       × elem_mul            -- элемент заклинания vs элемент цели
+       × stab                -- ×1.5, если элемент совпал с элементом кастера
+       × spell_power         -- глобальный и поэлементный (spell_power_ember)
+       × (1 - resist_elem)   -- сопротивление цели, кап 75%
+       × (1 - armor_reduction)  -- ТОЛЬКО is_attack, кап 75%
+       + floor(max_hp × percent_hp_damage)  -- Exhaustion, после брони
 ```
-Броня берётся через `target:get_stat('armor')` — с учётом всех модификаторов.
+
+**Броня** — не вычитание, а насыщающаяся кривая `armor / (armor + K)` при `K = 5`.
+Раньше было `base - armor`: при броне 2 и базе 10 это −80%, то есть шаг
+«броня 0 → 1 → 2» ломал игру. Теперь при базе 10:
+
+| armor | 0 | 1 | 2 | 3 | 4 | 6 | 10 |
+|---|---|---|---|---|---|---|---|
+| снижение | 0% | 17% | 29% | 38% | 44% | 55% | 67% |
+
+`K = 5` выбран под фактический диапазон брони в игре (0–3); при `K = 20`
+броня 1 давала 5%, и характеристика была незаметной.
+
+`resist_<element>` приходит из модификаторов (`adaptation`), кап 75%.
+`percent_hp_damage` (`exhaustion`) добавляется **после** брони и сопротивлений.
+`armor_pierce` снижает эффективную броню **до** применения кривой.
+
+Возвращаются две функции:
+- `DamageCalculator.calculate(...) -> number` — только итог;
+- `DamageCalculator.details(...) -> table` — вся разбивка (`attr_mul`, `elem_mul`,
+  `stab`, `resist`, `armor_reduction`, `attr_tier`, `elem_tier`, `total`).
+  Используется для цвета всплывающего урона и боевого лога.
+
+`Unit:take_damage(source, damage, is_attack, element, opts)` — `opts.is_spell = true`
+включает STAB и `spell_power`; `is_attack = true` включает броню.
+
+> ⚠️ **Заклинания не должны звать `take_damage` напрямую** — только через
+> `spellcast:dealDamage(target, amount, element)`. Метод сам подставляет элемент
+> и флаг `is_spell`. Прямой вызов без элемента — причина, по которой стихийные
+> множители раньше не работали вообще.
 
 ---
 
@@ -93,6 +154,23 @@ final = base_damage - armor
 - Операции: `add`, `mul`, `set`. Применяются в порядке: `set > (base + add) × mul`.
 
 Поля: `max_health`, `max_energy`, `damage`, `attack_range`, `move_range`, `initiative`, `armor`.
+
+**База отсутствующего стата не всегда 0.** Это критично:
+
+| Группа | База | Примеры |
+|---|---|---|
+| Абсолютные | `0` | `max_health`, `damage`, `armor`, `initiative` |
+| Множители | `1` | `spell_power`, `spell_power_<elem>` |
+| Доли/флаги | `0` | `armor_pierce`, `percent_hp_damage`, `miss_chance`, `resist_<elem>` |
+
+Раньше всё стартовало с `0`, поэтому `mul`-модификатор обнулял стат:
+`spell_power = (0 + 0) × 1.15 = 0`. Из-за этого четыре апгрейда на силу
+заклинаний не делали ничего. Дефолты заданы в `Stats.DEFAULTS` и
+`DYNAMIC_DEFAULTS` (префиксы `spell_power_` / `resist_`).
+
+Дополнительно читаются динамически (не перечислены в `Stats.STATS`, но работают):
+`spell_power`, `spell_power_<elem>`, `armor_pierce`, `percent_hp_damage`,
+`miss_chance`, `resist_<elem>`.
 
 ### 4.2. Модификаторы
 
@@ -435,20 +513,43 @@ node.event = events[math.random(#events)]
 | Система | Готово | В работе / нужно |
 |---|---|---|
 | Бои (HOMM3) | ✅ | Баланс, анимации |
+| Атрибут × Элемент (чарт, STAB, resist) | ✅ | Нужны существа `mechanic`/`ancient`/`chaos` |
+| Броня (кривая с насыщением) | ✅ | — |
 | Модификаторы (permanent/run/battle) | ✅ | — |
 | Осколки + эссенция | ✅ | Тюнинг наград |
-| Крафт + обмен | ✅ | Иконки, UX-полировка |
-| Улучшения (30+) | ✅ | Проверка хуков (`inspiration`, `second_wind`, `trap_master`) |
+| Крафт + обмен | ✅ | Иконки, UX-поливка; 3 из 5 атрибутов пусты |
+| Улучшения (30+) | ⚠️ | `aoe_bonus`, `echo_chance`, `double_cast_chance` не имеют потребителя |
 | Магазин (2×3, seed-based) | ✅ | Иконки предметов |
 | События (12 штук) | ✅ | **← точка расширения для сюжета** |
 | Stables + Pokedex | ✅ | Скроллинг, дубликаты |
 | Карта (seed-based) | ✅ | Иконки узлов |
-| Сохранения | ✅ | — |
+| Сохранения | ✅ | `RunState.active` не сбрасывается (см. §7.3) |
+| Тесты (`tests/`) | ✅ | 47 тестов, чистые данные и математика |
 | Обучение способностей | ❌ | Level-up choice, scrolls, trainer |
 | Мета-прогресс (`collector`) | ❌ | `Player.meta_shards`, `meta_story` |
 | Туториал | ❌ | — |
 | Иконки апгрейдов/предметов | ❌ | Заглушки |
 | Звук / анимации боя | ⚠️ | Базовые есть |
+
+---
+
+## 13.1. Тесты
+
+`tests/` — не требует LÖVE, запускается обычным Lua:
+
+```
+lua tests/run.lua
+```
+
+| Файл | Что проверяет |
+|---|---|
+| `tests/test_damage.lua` | Чарт, конвейер урона, STAB, resist, броня, дефолты `Stats` |
+| `tests/test_data_integrity.lua` | Существа ↔ чарт ↔ заклинания ↔ апгрейды ↔ UI-метки |
+
+`tests/test_data_integrity.lua` — это регрессия на исходный баг: в чарте не было
+строк `ancient`/`chaos`, а существа и осколки их используют. Тест также ловит
+ссылки на несуществующие заклинания (сейчас 15 известных — см.
+`KNOWN_MISSING_SPELLS` в тесте; **новая** такая ссылка уронит тест).
 
 ---
 

@@ -19,7 +19,7 @@
 --                 target = tile.actor,
 --                 caster = self.caster,
 --                 on_tick = function(self)
---                     self.target:take_damage(self.caster, 3)
+--                     self.target:take_damage(self.caster, 3, false, self.spell and self.spell.element, { is_spell = true })
 --                 end,
 --                 on_expire = function() end
 --             })
@@ -87,7 +87,7 @@ return {
                         target = tile.actor,
                         caster = caster,
                         on_tick = function(self)
-                            self.target:take_damage(self.caster, 3)
+                            self.target:take_damage(self.caster, 3, false, 'plant', { is_spell = true })
                         end,
                         on_expire = function() end
                     })

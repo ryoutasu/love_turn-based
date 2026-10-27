@@ -103,6 +103,12 @@ function Unit:setup(character, runModifiers)
             spell.current_cooldown = cooldown or 0
             spell.owner = self
             self.spells[#self.spells + 1] = spell
+        else
+            -- Раньше отсутствующий файл заклинания молча проглатывался:
+            -- существо теряло способность без единого сообщения, и это
+            -- выглядело как «баланс», а не как ошибка контента.
+            print(('[Unit] %s: spell %q has no definition in src/spells/ — skipped')
+                :format(tostring(character.name), tostring(id)))
         end
     end
 
@@ -269,30 +275,43 @@ end
 --- Наносит урон. Возвращает фактически нанесённое значение.
 --- @param source table|nil       Источник (Unit, spell, effect) — может быть nil для чистого урона
 --- @param damage number          Базовый урон
---- @param is_attack boolean|nil  Флаг: это атака (для логов)
+--- @param is_attack boolean|nil  Флаг: это атака (для логов и брони)
 --- @param element string|nil     Элемент атаки (для множителя). Если nil — берётся element источника
-function Unit:take_damage(source, damage, is_attack, element)
+--- @param opts table|nil         { is_spell = bool } — включает STAB и spell_power
+function Unit:take_damage(source, damage, is_attack, element, opts)
     if self.is_dead then return 0 end
 
-    local final_damage = damageCalculator.calculate(source, self, damage, element, { is_attack = is_attack })
+    opts = opts or {}
+    -- Атака ближнего боя и заклинание взаимоисключающи: броня применяется
+    -- только к физическим атакам, STAB/spell_power — только к заклинаниям.
+    if is_attack then opts.is_attack = true end
 
-    -- Визуальные эффекты
-    Tagtext:add('-' .. final_damage, self.x + 5, self.y - 40, 2, 30, { 1, 0, 0 })
+    local details = damageCalculator.details(source, self, damage, element, opts)
+    local final_damage = details.total
+
+    -- Визуальные эффекты. Цвет подсказывает игроку результат попадания
+    -- ещё до того, как он прочитает лог.
+    Tagtext:add('-' .. final_damage, self.x + 5, self.y - 40, 2, 30,
+        damageCalculator.tierColor(details))
     BattleState.shaking = 4
 
     -- Применяем урон
     self:change_health(-final_damage)
-    RunState:fireHook('on_damage_taken', self, element)
-    if is_attack and source.attack_range == 1 then
+
+    -- Хуки. element нужен Adaptation и другим resist-эффектам.
+    RunState:fireHook('on_damage_taken', self, details.elem)
+    if is_attack and source and source.attack_range == 1 then
         RunState:fireHook('on_melee_hit_taken', self, source)
     end
 
     -- Лог
+    local tag = damageCalculator.describe(details)
+    local suffix = tag ~= '' and (' (' .. tag .. ')') or ''
     if source and source.name then
         if is_attack then
-            BattleState:addLog(source.name .. ' attack ' .. self.name .. ' for ' .. final_damage .. ' damage')
+            BattleState:addLog(source.name .. ' attack ' .. self.name .. ' for ' .. final_damage .. ' damage' .. suffix)
         else
-            BattleState:addLog(self.name .. ' takes ' .. final_damage .. ' damage from ' .. source.name)
+            BattleState:addLog(self.name .. ' takes ' .. final_damage .. ' damage from ' .. source.name .. suffix)
         end
     end
 

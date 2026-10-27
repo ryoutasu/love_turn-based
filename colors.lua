@@ -53,7 +53,8 @@ ATTRIBUTES_COLORS = {
     mystic = { 19/255, 79/255, 92/255 },
     mechanic = { 133/255, 32/255, 12/255 },
     ancient = { 255/255, 255/255, 255/255 },
-    chaotic = { 255/255, 0/255, 255/255 }
+    -- Ключ 'chaos', как в SHARD_TYPES и type_chart (было 'chaotic').
+    chaos = { 255/255, 0/255, 255/255 }
 }
 
 ELEMENTS_COLORS = {
@@ -64,4 +65,5 @@ ELEMENTS_COLORS = {
     light = { 255/255, 255/255, 102/255 },
     dark = { 218/255, 177/255, 218/255 },
     plant = { 52/255, 168/255, 83/255 },
+    neutral = { 200/255, 200/255, 200/255 },
 }
