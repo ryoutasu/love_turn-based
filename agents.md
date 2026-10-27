@@ -148,6 +148,31 @@ Map adjacency has one authoritative source: `generator:isNeighbors`.
 Placement (`StoryPlacement`) and the placement test both use it. Any change to
 placement adjacency must update the test in the same commit.
 
+## Determinism
+
+Thread selection is deterministic: same `RunState:reset(seed)` state → same
+`ThreadGenerator.select()` outcome. Any addition to a thread's `requires()` or
+`weight()` function MUST be a pure function of camp state (no hidden RNG use,
+no mutation, no I/O). Any change that breaks this invariant must be caught by
+`tests/smoke_thread_determinism.lua`. If you need to debug a selection
+discrepancy, run `tests/diagnose_thread_determinism.lua` first — it isolates
+direct select vs select-after-generateMap vs select-after-place.
+
+Two traps when writing seeded tests:
+
+- **`select()` is not idempotent across a run.** `_place_story` calls
+  `ThreadGenerator.select()` once and pins `camp.active_thread`; a second
+  `select()` afterwards returns the *forced continuation*, not a fresh weighted
+  pick. `_place_story` also calls `PlayerMetaStory.begin_new_run()`, which bumps
+  `camp.total_runs` and can change other threads' weights mid-run. Read the
+  thread that actually ran from `levelmap.story.thread.id`.
+- **The Park-Miller RNG stub needs warm-up draws.** Its raw first output is
+  `(16807*seed mod M - 1)/(M-1)`, which for ordinary seeds is ~1e-5 — a heavy
+  bias toward zero. A single-draw weighted pick then always takes the first
+  non-zero bucket, which silently fabricates distributions (it is what produced
+  the bogus "bond_arc 100/100" sweep). Warm up ~12 draws before exposing
+  `newRandomGenerator`.
+
 ## Definition of "done"
 
 A task is done when:
