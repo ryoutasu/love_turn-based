@@ -81,7 +81,9 @@ return {
                                 end
                                 RunState:addUnlock('beast_reclaimed')
                                 PlayerMetaStory.mark_thread_complete(camp, 'lost_beast')
-                                Tagtext:add(name .. " comes back.")
+                                Tagtext:add(name .. " comes back.",
+                                    love.mouse.getX(), love.mouse.getY(),
+                                    1, 30, { 1, 1, 1 })
                                 return 0
                             end,
                         },
@@ -95,7 +97,9 @@ return {
                                 player:addEssence(3)
                                 RunState:addUnlock('beast_released')
                                 PlayerMetaStory.mark_thread_complete(camp, 'lost_beast')
-                                Tagtext:add(name .. " is gone.")
+                                Tagtext:add(name .. " is gone.",
+                                    love.mouse.getX(), love.mouse.getY(),
+                                    1, 30, { 1, 1, 1 })
                                 return 0
                             end,
                         },
@@ -110,7 +114,9 @@ return {
                                 c.health = math.min(max_hp, c.health + math.floor(max_hp * 0.5))
                                 RunState:addUnlock('beast_stayed')
                                 PlayerMetaStory.mark_thread_complete(camp, 'lost_beast')
-                                Tagtext:add(name .. " stays.")
+                                Tagtext:add(name .. " stays.",
+                                    love.mouse.getX(), love.mouse.getY(),
+                                    1, 30, { 1, 1, 1 })
                                 return 0
                             end,
                         },

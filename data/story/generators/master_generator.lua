@@ -116,9 +116,9 @@ local ELEMENTS   = {'ember','water','earth','storm','light','dark','plant'}
 local ATTRIBUTES = {'wild','mystic','mechanic'}
 
 local SPECIES_POOL = {
-    wild     = {'wild_wolf','wild_bear','wild_boar','wild_hawk'},
-    mystic   = {'mystic_wisp','mystic_seer','mystic_wraith','mystic_owl'},
-    mechanic = {'mech_drone','mech_golem','mech_spider','mech_sentry'},
+    wild     = {'Dewscale','Emberpuff','Frostling','Mystwing','Nightshade','Quillpaw'},-- {'wild_wolf','wild_bear','wild_boar','wild_hawk'},
+    mystic   = {'Aetheris','Blazeflare','Brambleclaw','Leafen','Flarevine','Rockjaw'},-- {'mystic_wisp','mystic_seer','mystic_wraith','mystic_owl'},
+    mechanic = {},-- {'mech_drone','mech_golem','mech_spider','mech_sentry'},
 }
 
 -- ===========================================================================

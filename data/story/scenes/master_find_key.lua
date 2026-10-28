@@ -14,7 +14,9 @@ return {
                     buttons = {
                         { text = "Take the key.", action = function(player)
                             RunState:addUnlock('dojo_key')
-                            Tagtext:add("Dojo key acquired.")
+                            Tagtext:add("Dojo key acquired.",
+                                love.mouse.getX(), love.mouse.getY(),
+                                1, 30, { 1, 1, 1 })
                             return 0
                         end },
                         { text = "Leave it.", action = function() return 0 end },

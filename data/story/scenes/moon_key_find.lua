@@ -73,7 +73,9 @@ return {
                                 -- Also unlock within this run, in case the
                                 -- payoff node is generated in the same run.
                                 RunState:addUnlock(KEY)
-                                Tagtext:add("A pale key.")
+                                Tagtext:add("A pale key.",
+                                    love.mouse.getX(), love.mouse.getY(),
+                                    1, 30, { 1, 1, 1 })
                                 return 0
                             end,
                         },

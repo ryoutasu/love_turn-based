@@ -83,7 +83,9 @@ return {
 
                                 player:addCharacter(name)
                                 RunState:addUnlock('moon_reward')
-                                Tagtext:add("Something wakes.")
+                                Tagtext:add("Something wakes.",
+                                    love.mouse.getX(), love.mouse.getY(),
+                                    1, 30, { 1, 1, 1 })
                                 return 0
                             end,
                         },

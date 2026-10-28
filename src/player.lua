@@ -41,6 +41,7 @@ local shardGap   = 6
 
 -- ------------------------------------------------------------------
 
+---@class Player
 local Player = Class{}
 
 function Player:init()

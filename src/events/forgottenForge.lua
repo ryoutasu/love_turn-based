@@ -48,7 +48,7 @@ return function(player)
             text = "Forge " .. c.name,
             action = function()
                 if upgrade_kind == 'all' then
-                    Character.addModifier(c, {
+                    Character.applyModifier(c, {
                         id       = 'forge_all_' .. RunState:randomInt(1000, 9999),
                         scope    = 'permanent',
                         stat     = 'damage',
@@ -56,7 +56,7 @@ return function(player)
                         value    = 1,
                         source   = 'event_forgotten_forge',
                     })
-                    Character.addModifier(c, {
+                    Character.applyModifier(c, {
                         id       = 'forge_all_armor_' .. RunState:randomInt(1000, 9999),
                         scope    = 'permanent',
                         stat     = 'armor',
@@ -64,7 +64,7 @@ return function(player)
                         value    = 1,
                         source   = 'event_forgotten_forge',
                     })
-                    Character.addModifier(c, {
+                    Character.applyModifier(c, {
                         id       = 'forge_all_hp_' .. RunState:randomInt(1000, 9999),
                         scope    = 'permanent',
                         stat     = 'max_health',
@@ -73,7 +73,7 @@ return function(player)
                         source   = 'event_forgotten_forge',
                     })
                 else
-                    Character.addModifier(c, {
+                    Character.applyModifier(c, {
                         id       = 'forge_' .. upgrade_kind .. '_' .. RunState:randomInt(1000, 9999),
                         scope    = 'permanent',
                         stat     = chosen_upgrade.stat,

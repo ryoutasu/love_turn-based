@@ -86,7 +86,9 @@ return {
                                 }
                                 RunState:addUnlock('bond_trusted')
                                 PlayerMetaStory.mark_thread_complete(camp, 'bond_arc')
-                                Tagtext:add(name .. " trusts you.")
+                                Tagtext:add(name .. " trusts you.",
+                                    love.mouse.getX(), love.mouse.getY(),
+                                    1, 30, { 1, 1, 1 })
                                 return 0
                             end,
                         },
@@ -107,7 +109,9 @@ return {
                                         source = 'bond_arc',
                                     }
                                     RunState:addUnlock('bond_forged')
-                                    Tagtext:add(name .. " is harder now.")
+                                    Tagtext:add(name .. " is harder now.",
+                                        love.mouse.getX(), love.mouse.getY(),
+                                        1, 30, { 1, 1, 1 })
                                 else
                                     c.modifiers[#c.modifiers + 1] = {
                                         id     = 'bond_tested_broken',
@@ -119,7 +123,9 @@ return {
                                         source = 'bond_arc',
                                     }
                                     RunState:addUnlock('bond_broken')
-                                    Tagtext:add(name .. " is wary.")
+                                    Tagtext:add(name .. " is wary.",
+                                        love.mouse.getX(), love.mouse.getY(),
+                                        1, 30, { 1, 1, 1 })
                                 end
                                 PlayerMetaStory.mark_thread_complete(camp, 'bond_arc')
                                 return 0
@@ -137,7 +143,9 @@ return {
                                 c.energy = stats:get('max_energy')
                                 RunState:addUnlock('bond_rested')
                                 PlayerMetaStory.mark_thread_complete(camp, 'bond_arc')
-                                Tagtext:add(name .. " is rested.")
+                                Tagtext:add(name .. " is rested.",
+                                    love.mouse.getX(), love.mouse.getY(),
+                                    1, 30, { 1, 1, 1 })
                                 return 0
                             end,
                         },

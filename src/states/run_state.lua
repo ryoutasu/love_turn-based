@@ -1,6 +1,7 @@
 local Character = require 'src.character'
 local Upgrades = require 'data.upgrades'
 
+---@class RunState
 local RunState = {
     active = false,
     seed = nil,

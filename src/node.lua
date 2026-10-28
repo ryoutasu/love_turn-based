@@ -102,7 +102,7 @@ function Node:init(id, x, y, isOpen, type)
     self.spriteScaleX = nodeRadius / self.sprite.w
     self.spriteScaleY = nodeRadius / self.sprite.h
 
-    if type == 'wild' or type == 'trainer' then
+    if self.type == 'wild' or self.type == 'trainer' then
         self.enemies_count = math.random(2, 3)
     end
     
@@ -115,6 +115,8 @@ function Node:init(id, x, y, isOpen, type)
     self.is_master_boss   = false -- triggers a BattleState after EventState
     self.grants           = nil   -- { run_key=…, story_key=… } (filled by thread)
     self._active_scene_id = nil   -- which scene actually ran (alt-aware)
+
+    self.image = images[self.type]
 end
 
 function Node:getGamestate()
@@ -211,7 +213,7 @@ function Node:draw()
         })
     end
 
-    local released, hovered = UI.node("node_"..self.id, self.x, self.y, nodeRadius, images[self.type], self.isDiscovered or DEBUG)
+    local released, hovered = UI.node("node_"..self.id, self.x, self.y, nodeRadius, self.image, self.isDiscovered or DEBUG)
     if released then
         if self.isOpen then
             if not self.isCompleted then
@@ -252,6 +254,11 @@ function Node:draw()
         UI.backdrop("node_backdrop_"..self.id, 0, -20, w + 16, h + 12, "BOTTOM")
         UI.nextPosition("CENTER")
         UI.text(0, 0, labels[self.type] or "Undiscovered", "CENTER", { 1, 1, 1, 1 }, labelFont)
+    end
+
+    if DEBUG and self.story_scene then
+        love.graphics.setColor(0, 1, 0)
+        love.graphics.print(self.story_id, self.x - 30, self.y + 25)
     end
 end
 
