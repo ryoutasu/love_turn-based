@@ -192,6 +192,21 @@ committing.
   node: `StoryPlacement` ignores parent adjacency for `is_boss` scenes because
   `'end'` is the deepest point on the map. Every map has exactly one `'end'`,
   so a boss that cannot find a free one is a real failure, not a fallback case.
+- Placement is **not 100% globally**. The parent-slot check (a candidate parent
+  needs at least `child_count` free usable neighbours) reduces but does not
+  eliminate failures: in rare topologies — a fork parent landing with fewer
+  free usable neighbours than it has children — placement still fails and the
+  run degrades to a legacy roguelike run. Measured residual after the check:
+  **0/1000 on seeds 1..1000, 3/4000 on seeds 1000..5000 (0.07%)**, always on
+  `shortcut` (the second branch arm, whose slot was taken by `scenic` or
+  excluded by the avoid-start rule). Re-measure with
+  `lua tests/measure_placement_1000.lua <from> <to>`. If you add a thread with
+  3+ branching scenes, verify with that script on a fresh seed range first.
+- A stricter variant of the parent-slot check — requiring the parent to have
+  room for *all* its still-unplaced children rather than just this scene's —
+  was tried and **rejected**: it made seeds 88, 233 and 862 fail, though they
+  place fine without it. Do not "strengthen" this check without re-running
+  `measure_placement_1000` over at least 1..5000 and comparing per-seed.
 
 ## Adjacency
 

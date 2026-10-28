@@ -75,9 +75,30 @@ local function ADJACENT(levelmap, a, b)
     return gen:isNeighbors(a.point, b.point) and true or false
 end
 
+--- How many free, usable map neighbours a node has. Used to guarantee a parent
+--- slot can actually host its graph children before we commit to it.
+---
+--- `is_boss = false` is deliberate: the candidate's CHILDREN are what need the
+--- slots, and those are non-boss scenes. A boss child sits on the map's 'end'
+--- node by identity, not by adjacency, so it never consumes a neighbour slot.
+--- Limitation: if a future thread gives a boss node siblings, this check would
+--- under-count (it cannot see the 'end' reservation) and could reject a
+--- candidate that would actually work.
+local function free_usable_neighbour_count(candidate, used, start_node,
+                                          levelmap, by_point)
+    local count = 0
+    for _, npoint in ipairs(neighbours(candidate)) do
+        local n = by_point[npoint]
+        if n and not used[n] and n ~= start_node
+            and is_usable(n, start_node, false) then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 --- BFS over the map graph from `from`, returning { [node] = distance }.
-local function map_distances(from, by_point)
-    if not from or not from.point then return {} end
+local function map_distances(from, by_point)    if not from or not from.point then return {} end
     local dist = { [from] = 0 }
     local q = { from }
     local head = 1
@@ -156,7 +177,13 @@ end
 ---        A hex lattice often offers a neighbour shared with an earlier scene,
 ---        and landing there shortcuts the story (it made `shortcut` adjacent
 ---        to the arrival node, so the branch read as depth 1 instead of 2).
-local function candidates_for(parent_nodes, used, start_node, by_point, from_start, rng, avoid, levelmap, is_boss)
+--- @param is_boss  this scene must land on the map's 'end' node.
+--- @param needs    how many graph children this scene has. A candidate is
+---        rejected unless it has at least that many free usable neighbours,
+---        otherwise committing to it dooms a later sibling (the classic
+---        crossroads-with-one-free-slot failure).
+local function candidates_for(parent_nodes, used, start_node, by_point, from_start, rng, avoid, levelmap, is_boss, needs)
+    needs = needs or 0
     local maps = {}
     for _, node in pairs(by_point) do maps[#maps + 1] = node end
     table.sort(maps, function(a, b)
@@ -186,7 +213,16 @@ local function candidates_for(parent_nodes, used, start_node, by_point, from_sta
                 for other in pairs(avoid or {}) do
                     if ADJACENT(levelmap, node, other) then touches_earlier = true end
                 end
-                if not touches_earlier then
+                -- A candidate that cannot seat this scene's children is a dead
+                -- end: reject it here rather than discovering the shortage
+                -- after the parent is already committed.
+                local has_room = true
+                if needs > 0 then
+                    local have = free_usable_neighbour_count(
+                        node, used, start_node, levelmap, by_point)
+                    if have < needs then has_room = false end
+                end
+                if not touches_earlier and has_room then
                     out[#out + 1] = { node = node, near = best }
                 end
             end
@@ -294,6 +330,14 @@ function StoryPlacement.place(levelmap, player, runState, opts)
     local from_start = map_distances(start_node, by_point)
     local rng = runState and runState.random and function() return runState:random() end or nil
 
+    -- How many graph children each scene has. A scene is only allowed on a map
+    -- node with at least that many free usable neighbours, so siblings are
+    -- guaranteed a slot before the parent is committed.
+    local child_count = {}
+    for id, gnode in pairs(graph) do
+        child_count[id] = #SceneGraph.outgoing(gnode)
+    end
+
     -- (b) The graph's start scene goes on the map start.
     local used = { [start_node] = true }
     stamp(start_node, 'start', graph, graph.start.scene)
@@ -352,6 +396,8 @@ function StoryPlacement.place(levelmap, player, runState, opts)
         end
 
         if not is_boss then
+            local needs = child_count[entry.id] or 0
+
             -- A scene must not sit next to the map start unless its parent IS
             -- the start scene. In this hex lattice one of crossroads' neighbours
             -- is also adjacent to the arrival node, so shortcut read as depth 1
@@ -367,7 +413,7 @@ function StoryPlacement.place(levelmap, player, runState, opts)
             end
 
             ranked = candidates_for(parent_nodes, used, start_node, by_point,
-                from_start, rng, avoid, levelmap, false)
+                from_start, rng, avoid, levelmap, false, needs)
 
             -- The avoid filter softens: every neighbour of the parent is already
             -- adjacent to the parent, so in a cramped lattice the only free
@@ -378,7 +424,7 @@ function StoryPlacement.place(levelmap, player, runState, opts)
             -- to avoid), so guard the emptiness check — next(nil) throws.
             if #ranked == 0 and avoid and next(avoid) ~= nil then
                 ranked = candidates_for(parent_nodes, used, start_node, by_point,
-                    from_start, rng, nil, levelmap, false)
+                    from_start, rng, nil, levelmap, false, needs)
             end
         end
 
