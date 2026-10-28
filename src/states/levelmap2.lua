@@ -16,6 +16,7 @@ local StoryPlacement        = require 'src.story.story_placement'
 local PlayerMetaStory       = require 'src.player_meta_story'
 local MasterGenerator       = require 'data.story.generators.master_generator'
 
+---@class Levelmap
 local Levelmap = {}
 
 function Levelmap:init()
@@ -136,7 +137,11 @@ function Levelmap:_advance_story(node)
     RunState.story.node_id = node.story_id
 
     local moved = SceneRunner.advance(RunState)
-    if not moved or SceneRunner.is_terminal(RunState) then
+    -- on_complete fires only when the thread has nowhere left to go. `not moved`
+    -- alone is not enough: branch nodes (crossroads) have no .next, so advance
+    -- returns false while the thread is still very much in progress — using OR
+    -- marked the master defeated at the crossroads, before the boss fight.
+    if not moved and SceneRunner.is_terminal(RunState) then
         local okThread, thread = pcall(function()
             return require('data.story.threads')[RunState.story.thread_id]
         end)

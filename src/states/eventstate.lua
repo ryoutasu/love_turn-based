@@ -101,13 +101,16 @@ function EventState.generate_story(node, player, locked)
         RunState.story.node_id = node.story_id or RunState.story.node_id
     end
 
-    -- Гейт закрыт — переключаемся на узел alt_when_locked
+    -- Гейт закрыт — играем сцену alt_when_locked
     -- (например, «рассерженный мастер» вместо обычной сцены босса).
-    if locked and RunState.story then
-        SceneRunner.resolve_node(RunState, true)
+    -- Это SCENE id, а не id узла графа: граф остаётся на том же узле,
+    -- меняется только сцена, которую он показывает.
+    local scene_override
+    if locked and node.alt_when_locked then
+        scene_override = node.alt_when_locked
     end
 
-    local okGen, result = pcall(SceneRunner.current, RunState, ctx)
+    local okGen, result = pcall(SceneRunner.current, RunState, ctx, scene_override)
     if not okGen or not result then
         print('[story] scene generation failed: ' .. tostring(result))
         return nil

@@ -25,6 +25,9 @@ local Threads         = require 'data.story.threads'
 
 local StoryPlacement = {}
 
+-- Set STORY_DEBUG to true locally to trace placement decisions.
+local STORY_DEBUG = false
+
 -- How far a merge scene may be from its parents when no point touches all of
 -- them at once (hex lattices rarely offer a perfect diamond).
 local MERGE_REACH = 4
@@ -32,8 +35,13 @@ local MERGE_REACH = 4
 -- Nodes that may host a story scene.
 -- T1: trainer nodes are acceptable story slots (disposable filler; see
 -- AGENTS.md placement notes). shop/rest remain excluded.
-local function is_usable(node, start_node)
+--
+-- Boss scenes are special-cased: the graph's `is_boss` node must sit on the
+-- map's single 'end' node, which is the one the player reads as the final.
+-- Otherwise the 'end' node stays a legacy battle with no story intro.
+local function is_usable(node, start_node, is_boss)
     if node == start_node then return false end
+    if is_boss then return node.type == 'end' end
     return node.type == 'event' or node.type == 'wild' or node.type == 'trainer'
 end
 
@@ -148,7 +156,7 @@ end
 ---        A hex lattice often offers a neighbour shared with an earlier scene,
 ---        and landing there shortcuts the story (it made `shortcut` adjacent
 ---        to the arrival node, so the branch read as depth 1 instead of 2).
-local function candidates_for(parent_nodes, used, start_node, by_point, from_start, rng, avoid, levelmap)
+local function candidates_for(parent_nodes, used, start_node, by_point, from_start, rng, avoid, levelmap, is_boss)
     local maps = {}
     for _, node in pairs(by_point) do maps[#maps + 1] = node end
     table.sort(maps, function(a, b)
@@ -161,7 +169,7 @@ local function candidates_for(parent_nodes, used, start_node, by_point, from_sta
 
     local out = {}
     for _, node in ipairs(maps) do
-        if not used[node] and node ~= start_node and is_usable(node, start_node) then
+        if not used[node] and node ~= start_node and is_usable(node, start_node, is_boss) then
             local best = 0
             local fits = true
             for i = 1, #reach do
@@ -233,7 +241,7 @@ end
 --- @param levelmap  Levelmap state (needs .nodes, .currentNode, .generator)
 --- @param player    Player
 --- @param runState  RunState
---- @param opts      optional { thread = ..., graph = ... } from a prior select()
+--- @param opts      table optional { thread = ..., graph = ... } from a prior select()
 --- @return table|nil { thread, graph, placed = { node }, ctx }
 function StoryPlacement.place(levelmap, player, runState, opts)
     opts = opts or {}
@@ -314,33 +322,64 @@ function StoryPlacement.place(levelmap, player, runState, opts)
             return nil
         end
 
-        -- A scene must not sit next to the map start unless its parent IS the
-        -- start scene. In this hex lattice one of crossroads' neighbours is
-        -- also adjacent to the arrival node, so shortcut read as depth 1 and
-        -- the branch looked shorter than it is.
-        --
-        -- Only the start is excluded. Excluding every earlier scene starved
-        -- the branch instead: scenic was left with a single candidate, so
-        -- shortcut had nothing left to pair with and took the start-adjacent
-        -- slot anyway.
-        local avoid
-        if node_of[entry.parents[1]] ~= start_node then
-            avoid = { [start_node] = true }
+        -- Boss scenes must land on the map's 'end' node. The map offers
+        -- exactly one, so adjacency cannot be honoured there: a boss is a
+        -- narrative terminus, not a leg of the fork.
+        local is_boss = graph[entry.id].is_boss or false
+
+        local ranked
+        if is_boss then
+            -- The boss goes on the map's single 'end' node wherever it sits.
+            -- It cannot be reached from the parent by adjacency: 'end' is the
+            -- deepest point of the map, while the fork's arms are mid-map.
+            -- Reachability from the parents is deliberately ignored here so the
+            -- search is just "the free 'end' node".
+            local maps = {}
+            for _, node in pairs(by_point) do maps[#maps + 1] = node end
+            table.sort(maps, function(a, b) return (a.id or 0) < (b.id or 0) end)
+            for _, node in ipairs(maps) do
+                if not used[node] and is_usable(node, start_node, true) then
+                    ranked = ranked or {}
+                    ranked[#ranked + 1] = node
+                end
+            end
         end
 
-        local ranked = candidates_for(parent_nodes, used, start_node, by_point,
-            from_start, rng, avoid, levelmap)
+        if is_boss and (not ranked or #ranked == 0) then
+            print(('[story] placement failed: boss scene %s — no end node')
+                :format(entry.id))
+            return nil
+        end
 
-        -- The avoid filter softens: every neighbour of the parent is already
-        -- adjacent to the parent, so in a cramped lattice the only free slots
-        -- may also touch the start. Prefer a slot that touches nothing
-        -- earlier, but fall back rather than failing the whole run.
-        --
-        -- `avoid` is nil when this scene's parent is the map start (nothing to
-        -- avoid), so guard the emptiness check — next(nil) throws.
-        if #ranked == 0 and avoid and next(avoid) ~= nil then
+        if not is_boss then
+            -- A scene must not sit next to the map start unless its parent IS
+            -- the start scene. In this hex lattice one of crossroads' neighbours
+            -- is also adjacent to the arrival node, so shortcut read as depth 1
+            -- and the branch looked shorter than it is.
+            --
+            -- Only the start is excluded. Excluding every earlier scene starved
+            -- the branch instead: scenic was left with a single candidate, so
+            -- shortcut had nothing left to pair with and took the start-adjacent
+            -- slot anyway.
+            local avoid
+            if node_of[entry.parents[1]] ~= start_node then
+                avoid = { [start_node] = true }
+            end
+
             ranked = candidates_for(parent_nodes, used, start_node, by_point,
-                from_start, rng, nil, levelmap)
+                from_start, rng, avoid, levelmap, false)
+
+            -- The avoid filter softens: every neighbour of the parent is already
+            -- adjacent to the parent, so in a cramped lattice the only free
+            -- slots may also touch the start. Prefer a slot that touches
+            -- nothing earlier, but fall back rather than failing the whole run.
+            --
+            -- `avoid` is nil when this scene's parent is the map start (nothing
+            -- to avoid), so guard the emptiness check — next(nil) throws.
+            if #ranked == 0 and avoid and next(avoid) ~= nil then
+                ranked = candidates_for(parent_nodes, used, start_node, by_point,
+                    from_start, rng, nil, levelmap, false)
+            end
         end
 
         -- Sibling placement is structural: every candidate is a map neighbour
@@ -357,10 +396,18 @@ function StoryPlacement.place(levelmap, player, runState, opts)
         end
 
         local map_node = ranked[1]
+        local old_type = map_node.type
+        -- Keep the original type for diagnostics; the node itself is retyped so
+        -- it routes to EventState instead of the type's battle/rest state.
         stamp(map_node, entry.id, graph, graph[entry.id].scene)
+        map_node.original_type  = old_type
         map_node.type  = 'event'
         map_node.event = nil
         map_node.is_master_boss = graph[entry.id].is_boss or false
+
+        if STORY_DEBUG then
+            print('Changed node from ' .. tostring(old_type) .. ' to ' .. map_node.type)
+        end
 
         used[map_node] = true
         node_of[entry.id] = map_node

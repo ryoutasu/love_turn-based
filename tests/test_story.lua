@@ -669,10 +669,10 @@ test('scene runner honours alt_when_locked', function()
     -- Walk to the boss node to exercise the gate.
     eq(SceneRunner.jump_to(run, 'boss'), true, 'jumped to boss node')
 
-    local locked_node = SceneRunner.resolve_node(run, true)
-    ok(locked_node ~= nil, 'resolved a node while locked')
-    eq(locked_node.scene, 'master_boss_angry',
-       'locked gate must fall back to the angry boss')
+    -- alt_when_locked names a SCENE, not another graph node.
+    local locked_scene = SceneRunner.resolve_node(run, true)
+    eq(locked_scene, 'master_boss_angry',
+       'locked gate must fall back to the angry boss scene')
 end)
 
 test('scene runner: unknown scene id raises instead of failing silently', function()

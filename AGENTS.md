@@ -100,6 +100,18 @@ src/
 - If the test needs a real `love.run` loop, mark it `tests/visual_<topic>.lua` and
   document how to run it manually.
 
+## Test contract rules
+
+The standard test run is: `for f in tests/*.lua; do lua $f; done`. Never use a
+fixed sublist of test files. A red test that is not in the run list is
+invisible — `tests/test_story.lua` was red for seven commits before being
+noticed. Any test in `tests/` must be run as part of any "run all suites" step.
+
+`tests/` also contains measurement scripts (`measure_*.lua`,
+`diagnose_*.lua`) that always exit 0 and print data rather than asserting. They
+are included in the sweep and are expected to pass trivially; use their exit
+code, not their output text, to judge a suite.
+
 ## Commits
 
 - One task = one commit.
@@ -163,10 +175,23 @@ committing.
   required, add a `{ visited_scene = '<scene_id>' }` gate to the arm — currently
   not implemented.
 - `scene_graph.validate` treats `alt_when_locked` as a **scene id**, not a graph
-  node id. It is NOT a graph edge. A node's `alt_when_locked` field is resolved
-  by `Node:resolve_scene_id` via `Scenes[<id>]`, not by walking the graph. Do not
-  point `alt_when_locked` at another graph node — collapse the fallback into the
-  primary node (see `master_trial.boss`).
+  node id. It is NOT a graph edge. `SceneRunner.resolve_node` returns that scene
+  id string (or nil); `SceneRunner.current` accepts it as its `scene_override`
+  argument and plays it for the *same* graph node. The graph never jumps to
+  another node for a fallback scene — `story.node_id` is unchanged. Do not
+  conflate scene ids with graph node ids; do not point `alt_when_locked` at
+  another graph node (collapse the fallback into the primary node, see
+  `master_trial.boss`).
+- Branch scenes (e.g. `master_crossroads`) do not call `SceneRunner.jump_to`.
+  Branch navigation works implicitly: each story node's `story_id` is used to
+  overwrite `RunState.story.node_id` when the player enters it. If a future
+  branch needs to CONSUME a choice (e.g. skip a scene based on which path was
+  taken), `jump_to` must be called from the scene action. Do not rely on
+  implicit navigation for new threads.
+- Boss graph nodes are placed on the map's `'end'` node, not on an adjacent
+  node: `StoryPlacement` ignores parent adjacency for `is_boss` scenes because
+  `'end'` is the deepest point on the map. Every map has exactly one `'end'`,
+  so a boss that cannot find a free one is a real failure, not a fallback case.
 
 ## Adjacency
 

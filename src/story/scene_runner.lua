@@ -1,4 +1,4 @@
-﻿-- src/story/scene_runner.lua
+-- src/story/scene_runner.lua
 --
 -- Runs a thread's scene graph: picks the starting node, generates the
 -- EventState payload for it, and remembers where to go next.
@@ -55,35 +55,45 @@ function SceneRunner._begin(thread, ctx, runState)
     return { graph = graph, thread = thread }
 end
 
+--- Generate the payload for an explicit scene id.
+--- Raised (not returned as nil) so a bad scene id surfaces with the scene
+--- named, instead of silently degrading to a legacy event.
+function SceneRunner.generate_for(scene_id, ctx)
+    local scene = Scenes[scene_id]
+    if not scene then
+        error(('story: unknown scene id %q'):format(tostring(scene_id)))
+    end
+    local payload = scene.generate(ctx)
+    if not payload then
+        error(('story: scene %q generated nothing'):format(scene_id))
+    end
+    return payload
+end
+
 --- Generate the payload for the node we are currently standing on.
-function SceneRunner.current(runState, ctx)
+--- @param scene_override string|nil  a SCENE id that overrides node.scene
+---        (that is how alt_when_locked is played: the fallback is a different
+---        scene for the same graph node, not a different graph node).
+function SceneRunner.current(runState, ctx, scene_override)
     local story = runState.story
     if not story or not story.graph or not story.node_id then return nil end
 
-    local node     = story.graph[story.node_id]
+    local node = story.graph[story.node_id]
     if not node then return nil end
 
-    local scene_id = node.scene
-    local scene    = Scenes[scene_id]
-    if not scene then
-        error(('story: node %q references unknown scene %q')
-            :format(tostring(story.node_id), tostring(scene_id)))
-    end
+    local scene_id = scene_override or node.scene
 
     -- Log every scene actually entered: this is what makes a run auditable
     -- and lets tests assert "the player saw exactly these scenes".
     story.scene_log[#story.scene_log + 1] = scene_id
     story.flags = story.flags or {}
 
-    local payload = scene.generate(ctx)
-    if not payload then
-        error(('story: scene %q generated nothing'):format(scene_id))
-    end
+    local payload = SceneRunner.generate_for(scene_id, ctx)
 
     return {
         scene_id = scene_id,
         node_id  = story.node_id,
-        scene    = scene,
+        scene    = Scenes[scene_id],
         node     = node,
         payload  = payload,
         graph    = story.graph,
@@ -123,8 +133,11 @@ function SceneRunner.is_terminal(runState)
     return #SceneGraph.outgoing(node) == 0
 end
 
---- Resolve which node to use given the node's `requires` gate, honouring
---- `alt_when_locked`. Mirrors Node:resolve_scene_id semantics.
+--- Resolve the scene id to play for the current node, honouring the node's
+--- `requires` gate.
+--- Returns a SCENE id (for alt_when_locked) or nil when the node's own scene
+--- applies. It does NOT mutate story.node_id: the graph keeps standing on the
+--- same node; only the scene shown changes.
 function SceneRunner.resolve_node(runState, is_locked)
     local story = runState.story
     if not story or not story.graph or not story.node_id then return nil end
@@ -133,10 +146,9 @@ function SceneRunner.resolve_node(runState, is_locked)
     if not node then return nil end
 
     if is_locked and node.alt_when_locked then
-        story.node_id = node.alt_when_locked
-        return story.graph[story.node_id]
+        return node.alt_when_locked   -- a SCENE id
     end
-    return node
+    return nil
 end
 
 --- Clear story state at the end of a run.
