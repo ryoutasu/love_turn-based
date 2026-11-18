@@ -2,8 +2,6 @@ local RunState              = require 'src.states.run_state'
 local SaveManager           = require 'src.save_manager'
 local gen                   = require 'src.levelgenerator'
 
-local generator_offset = 75
-
 local Player                = require 'src.player'
 local Node                  = require 'src.node'
 local Events                = require 'src.events'
@@ -16,6 +14,8 @@ local StoryPlacement        = require 'src.story.story_placement'
 local PlayerMetaStory       = require 'src.player_meta_story'
 local MasterGenerator       = require 'data.story.generators.master_generator'
 
+local MAP_WIDTH      = 1200
+local MAP_HEIGHT     = 700
 -- Камера карты.
 local ZOOM_MIN       = 0.35   -- насколько карту можно отдалить
 local ZOOM_MAX       = 2.5    -- и приблизить
@@ -27,6 +27,13 @@ local DRAG_THRESHOLD = 4
 -- На сколько карта должна выйти за экран, чтобы её можно было утащить за край.
 local PAN_EDGE_SLACK = 80
 
+-- Вступительная анимация камеры при первом заходе на карту в забеге.
+local INTRO_DELAY   = 1    -- сколько секунд показать карту целиком
+local INTRO_TIME    = 2.5  -- длительность полёта к начальному ноду
+local INTRO_ZOOM    = 1.5  -- во сколько раз приблизиться по дороге
+-- Поля вокруг карты при вписывании её в экран, px.
+local MAP_MARGIN    = 40
+
 ---@class Levelmap
 local Levelmap = {}
 
@@ -35,7 +42,7 @@ function Levelmap:init()
     self.pathes        = {}
     self.currentNode   = nil
     self.active        = false
-    self.mapRenderer   = MapRenderer(generator_offset)
+    self.mapRenderer   = MapRenderer()
     self.seed          = nil
 
     -- Панорамирование: ЛКМ, зажатая на пустом месте карты.
@@ -45,6 +52,11 @@ function Levelmap:init()
     self.panLastY      = 0
     self.panStartX     = 0
     self.panStartY     = 0
+
+    -- Вступительный полёт камеры к начальному ноду.
+    self.camIntro      = nil
+    self.introSeen     = false
+    self.dragSkippedIntro = false
 end
 
 -- ================================================================
@@ -53,11 +65,16 @@ end
 
 function Levelmap:enter(from, args)
     self.active = true
+    self.camIntro = nil
 
     -- ---- Загрузка из сейва ----
     if args.load_from_save then
         self.player = args.player
         self:deserialize(args.save_data)
+        -- Вид по центру. Вступление при загрузке не играем: карта уже
+        -- знакома, а начальный нод давно пройден.
+        self.introSeen = true
+        self:_layoutView()
         return
     end
 
@@ -93,6 +110,14 @@ function Levelmap:enter(from, args)
     -- Раскладка активной сюжетной нити поверх готовой карты.
     -- Нет нити — забег остаётся обычным roguelite-забегом.
     self:_place_story()
+
+    -- Новый забег: карта целиком по центру, затем камера наводится на
+    -- начальный нод. introSeen живёт в сейве: это «первый заход в этот
+    -- забег», а не «первый запуск игры».
+    self:_layoutView()
+    if not self.introSeen then
+        self:_startCameraIntro(self.currentNode)
+    end
 
     self:_saveGame()
 end
@@ -264,9 +289,7 @@ end
 
 function Levelmap:_generateMap()
     self.generator = gen()
-    self.generator:generate(150,
-        love.graphics.getWidth()  - generator_offset * 2,
-        love.graphics.getHeight() - generator_offset * 2)
+    self.generator:generate(170, MAP_WIDTH, MAP_HEIGHT)
 
     for _, edge in ipairs(self.generator.edges) do
         local path = Path(edge)
@@ -320,7 +343,7 @@ function Levelmap:_generateMap()
             end
         end
 
-        local node = Node(i, point.x + generator_offset, point.y + generator_offset,
+        local node = Node(i, point.x, point.y,
             isStartingPoint, ntype)
         node.point = point
         node.level = point.cost
@@ -340,8 +363,7 @@ function Levelmap:_generateMap()
     self.mode          = 'none'
     self.currentAction = nil
 
-    -- Карта строится под текущий размер экрана, поэтому камера стартует
-    -- сброшенной: 1:1, как было до появления зума.
+    -- Карта пересобрана — вид на неё ставит _layoutView в enter().
     -- mapRenderer может не быть: тесты собирают Levelmap без init().
     if self.mapRenderer then
         self.mapRenderer:resetView()
@@ -390,6 +412,9 @@ function Levelmap:serialize()
 
     return {
         seed       = self.seed,
+        -- Вступление камеры играется один раз за забег. Флаг — обычное
+        -- скалярное поле (сохраняемое состояние), а не объект камеры.
+        introSeen  = self.introSeen or false,
         nodeStates = nodeStates,
         pathStates = pathStates,
     }
@@ -397,6 +422,8 @@ end
 
 function Levelmap:deserialize(data)
     self.seed = data.seed
+    -- Старые сейвы флага не имеют: считаем вступление уже сыгранным.
+    self.introSeen = data.introSeen ~= false
 
     -- Перегенерируем карту с тем же seed'ом — узлы/типы/события совпадут
     self.nodes       = {}
@@ -627,37 +654,39 @@ end
 -- Не даёт утащить карту целиком за край экрана: хотя бы часть карты всегда
 -- остаётся видимой.
 function Levelmap:_clampPan()
-    if #self.nodes == 0 then return end
+    local minX, minY, maxX, maxY = self:_mapBounds()
+    if not minX then return end
 
     local mr = self.mapRenderer
-    local minX, minY = math.huge, math.huge
-    local maxX, maxY = -math.huge, -math.huge
-    for _, node in ipairs(self.nodes) do
-        minX, maxX = math.min(minX, node.x), math.max(maxX, node.x)
-        minY, maxY = math.min(minY, node.y), math.max(maxY, node.y)
-    end
+    local w, h = love.graphics.getWidth(), love.graphics.getHeight()
 
     -- Экранные координаты крайних точек карты:
     --   left = minX * scale + view, right = maxX * scale + view.
-    -- Допустим: left не правее (screenSize + margin) и right не левее
-    -- (-margin). Иначе карта уехала за экран целиком.
+    -- Допустимо: left не правее (w + margin) и right не левее (-margin).
+    -- Иначе карта уехала за экран целиком.
     local function clampAxis(view, lo, hi, screenSize)
         local margin  = PAN_EDGE_SLACK
         local maxView = screenSize + margin - lo * mr.scale - PAN_PADDING
         local minView = -hi * mr.scale - margin + PAN_PADDING
         if minView > maxView then
-            -- Карта уже экрана — держим её в пределах.
-            return math.min(math.max(view, maxView), minView)
+            -- Карта мельче видимой области: центр вида держим по центру,
+            -- но смещение всё равно ограничено, чтобы она не «прыгала».
+            local center = (maxView + minView) / 2
+            local slack  = (maxView - minView) / 2
+            return math.min(math.max(view, center - slack), center + slack)
         end
         return math.min(math.max(view, minView), maxView)
     end
 
-    mr.viewX = clampAxis(mr.viewX, minX, maxX, love.graphics.getWidth())
-    mr.viewY = clampAxis(mr.viewY, minY, maxY, love.graphics.getHeight())
+    mr.viewX = clampAxis(mr.viewX, minX, maxX, w)
+    mr.viewY = clampAxis(mr.viewY, minY, maxY, h)
 end
 
 -- Колесо мыши: зум карты (узлы, пути, подписи) вокруг курсора.
 function Levelmap:wheelmoved(x, y)
+    -- Любое осмысленное действие мышью забирает камеру у вступления.
+    self:_endIntro()
+
     if not self:isActive() then return end
     if self:_isModalOpen() then return end
 
@@ -671,11 +700,165 @@ function Levelmap:wheelmoved(x, y)
 end
 
 -- ================================================================
+-- Кадрирование карты: стартовый вид и вступительный полёт
+-- ================================================================
+--
+-- Состояние вида — тройка (scale, viewX, viewY). Стартовый вид и полёт
+-- описывают только (scale, centerX, centerY) — центр вида в мировых
+-- координатах; в viewX/viewY он переводится в самом конце (_applyView).
+-- Так зум и сдвиг не конфликтуют: оба меняют scale и center независимо.
+
+-- Границы карты по узлам: minX, minY, maxX, maxY. nil для пустой карты.
+function Levelmap:_mapBounds()
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
+    for _, node in ipairs(self.nodes) do
+        minX, maxX = math.min(minX, node.x), math.max(maxX, node.x)
+        minY, maxY = math.min(minY, node.y), math.max(maxY, node.y)
+    end
+    if minX > maxX then return nil end
+    return minX, minY, maxX, maxY
+end
+
+-- Область экрана, реально видимая под HUD.
+-- MAP_AREA — необязательная настройка вида { x, y, w, h } в долях экрана
+-- (например, оставить поля под сердца/таблички). По умолчанию — весь экран.
+function Levelmap:_mapArea()
+    local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+    local area = MAP_AREA or {}
+    return (area.x or 0) * w, (area.y or 0) * h,
+           w * (area.w or 1), h * (area.h or 1)
+end
+
+-- Текущий центр вида в мировых координатах.
+function Levelmap:_viewCenter()
+    local ax, ay, aw, ah = self:_mapArea()
+    local mr = self.mapRenderer
+    return (ax + aw / 2 - mr.viewX) / mr.scale,
+           (ay + ah / 2 - mr.viewY) / mr.scale
+end
+
+-- Ставит вид по (scale, center). Ограничения вида сюда НЕ применяются:
+-- и стартовый кадр, и полёт считают переход от самих себя, а не от
+-- зажатого на каждом кадре вида. Иначе полёт застревал бы на границе
+-- (шаг от текущей позиции каждый раз отсекается) и не долетал до цели.
+-- Посторонний ввод ограничивает вид обычным _clampPan.
+function Levelmap:_applyView(scale, cx, cy)
+    local mr = self.mapRenderer
+    local ax, ay, aw, ah = self:_mapArea()
+
+    mr.scale = math.min(math.max(scale, ZOOM_MIN), ZOOM_MAX)
+    mr.viewX = ax + aw / 2 - cx * mr.scale
+    mr.viewY = ay + ah / 2 - cy * mr.scale
+end
+
+-- Стартовый вид: вся карта по центру видимой области.
+--   * влезает в экран  — 1:1 по центру;
+--   * не влезает       — вписываем с полями.
+function Levelmap:_frameOverview()
+    local b = { self:_mapBounds() }
+    if #b == 0 then
+        self:_applyView(1, 0, 0)
+        return
+    end
+
+    local margin = MAP_MARGIN
+    local mapW = (b[3] - b[1]) + margin * 2
+    local mapH = (b[4] - b[2]) + margin * 2
+    local _, _, aw, ah = self:_mapArea()
+
+    local scale = math.min(aw / mapW, ah / mapH, 1)
+    self:_applyView(scale, (b[1] + b[3]) / 2, (b[2] + b[4]) / 2)
+end
+
+-- Ставит стартовый вид под текущий размер экрана.
+function Levelmap:_layoutView()
+    self:_frameOverview()
+end
+
+-- Итоговый центр вступления: начальный нод, но центр вида не выходит за
+-- границы самой карты. Нод у края карты поэтому доводит камеру до края
+-- карты и не утаскивает кадр в угол экрана; _clampPan при этом ничего не
+-- сдвигает, и полёт доходит до цели ровно.
+function Levelmap:_introTarget(nodeX, nodeY)
+    local minX, minY, maxX, maxY = self:_mapBounds()
+    if not minX then return nodeX, nodeY end
+
+    return math.min(math.max(nodeX, minX), maxX),
+           math.min(math.max(nodeY, minY), maxY)
+end
+
+-- Начало вступления: запоминаем стартовый вид, а цели полёта считаем
+-- один раз от него (а не от текущего вида на каждом кадре).
+function Levelmap:_startCameraIntro(node)
+    self.camIntro = nil
+    if not node then return end
+
+    local fromScale = self.mapRenderer.scale
+    local fromCX, fromCY = self:_viewCenter()
+
+    -- Приближается к начальному ноду, но всего карту в один нод не
+    -- превращает.
+    local toScale = math.min(fromScale * INTRO_ZOOM, ZOOM_MAX)
+    local toCX, toCY = self:_introTarget(node.x, node.y)
+
+    self.camIntro = {
+        t         = 0,
+        fromScale = fromScale,
+        fromCX    = fromCX,
+        fromCY    = fromCY,
+        toScale   = toScale,
+        toCX      = toCX,
+        toCY      = toCY,
+    }
+end
+
+-- Кадр вступления. Возвращает true, пока камера в движении: на это время
+-- клики по карте не проходят (случайное нажатие не «выберет» нод).
+function Levelmap:_updateIntro(dt)
+    local intro = self.camIntro
+    if not intro then return false end
+
+    intro.t = intro.t + dt
+
+    if intro.t < INTRO_DELAY then
+        return true   -- карта показана целиком, полёт ещё не начался
+    end
+
+    local k = math.min((intro.t - INTRO_DELAY) / INTRO_TIME, 1)
+    local e = k * k * (3 - 2 * k)   -- smoothstep: плавные начало и конец
+
+    self:_applyView(
+        self:_lerp(intro.fromScale, intro.toScale, e),
+        self:_lerp(intro.fromCX, intro.toCX, e),
+        self:_lerp(intro.fromCY, intro.toCY, e))
+
+    if k >= 1 then
+        self:_endIntro()
+        return false
+    end
+    return true
+end
+
+function Levelmap:_lerp(a, b, t)
+    return a + (b - a) * t
+end
+
+-- Обрывает вступление там, где камера сейчас: дальше управляет игрок.
+function Levelmap:_endIntro()
+    if not self.camIntro then return end
+    self.camIntro  = nil
+    self.introSeen = true
+end
+
+-- ================================================================
 -- Update / draw / input
 -- ================================================================
 
 function Levelmap:update(dt)
     if self.active then
+        self:_updateIntro(dt)
+
         local mx, my = love.mouse.getPosition()
         if self.panning then
             if love.mouse.isDown(1) then
@@ -744,6 +927,15 @@ function Levelmap:mousepressed(x, y, button)
     if self:_isModalOpen() then return end
     if button ~= 1 then return end
 
+    -- Во время вступления карта движется сама. Клик по карте его
+    -- пропускает, но не выбирает нод: под курсором в этот момент может
+    -- оказаться что угодно.
+    if self.camIntro then
+        self:_endIntro()
+        self.dragSkippedIntro = { x = x, y = y }
+        return
+    end
+
     -- Пустое место карты: ни нод, ни кликабельного элемента интерфейса
     -- (кнопка Camp, сердца, подписи) — начинаем панорамирование.
     -- Хитбоксы UI — это последний отрисованный кадр, а он всегда есть:
@@ -755,12 +947,25 @@ function Levelmap:mousepressed(x, y, button)
 end
 
 function Levelmap:mousemoved(x, y)
+    -- Клик во время вступления только остановил камеру (camIntro уже nil).
+    -- Если мышь ведут, не отпуская ЛКМ, — это перетаскивание карты, а не
+    -- нажатие. Точкой начала берём место клика: _beginPan иначе записал бы
+    -- текущую точку и потерял сдвиг.
+    if self.dragSkippedIntro then
+        local skipX, skipY = self.dragSkippedIntro.x, self.dragSkippedIntro.y
+        self.dragSkippedIntro = false
+        self:_beginPan(x, y)
+        self.panStartX, self.panStartY = skipX, skipY
+        return
+    end
+
     if not self.panning then return end
     self:_updatePan(x, y)
 end
 
 function Levelmap:mousereleased(x, y, button)
     if button ~= 1 then return end
+    self.dragSkippedIntro = false
     if not self.panning then return end
 
     self:_updatePan(x, y)
@@ -771,8 +976,9 @@ function Levelmap:keypressed(key)
     if key == "f3" and not UpgradeSelectScreen:isActive() then
         UpgradeSelectScreen:open(self.player)
     elseif key == "home" then
-        -- Возврат к виду по умолчанию (карта вписана в экран).
-        self.mapRenderer:resetView()
+        -- Возврат к виду по умолчанию: вся карта по центру.
+        self:_endIntro()
+        self:_frameOverview()
     end
 end
 

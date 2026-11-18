@@ -412,6 +412,173 @@ test('the map cannot be dragged completely off-screen', function()
 end)
 
 -- ---------------------------------------------------------------------------
+-- Startup view: the map is centered, the intro flight frames the start node
+-- ---------------------------------------------------------------------------
+
+-- Screen-space bounding box of the rendered nodes.
+local function nodes_on_screen(lm)
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
+    for _, node in ipairs(lm.nodes) do
+        local sx, sy = lm.mapRenderer:toScreen(node.x, node.y)
+        minX, maxX = math.min(minX, sx), math.max(maxX, sx)
+        minY, maxY = math.min(minY, sy), math.max(maxY, sy)
+    end
+    return minX, minY, maxX, maxY
+end
+
+test('_layoutView centers a map that fits the screen at 1:1', function()
+    local lm = make_levelmap()          -- nodes at (300,200) and (900,600)
+    lm:_layoutView()
+
+    local mr = lm.mapRenderer
+    assert(near(mr.scale, 1), 'a map that fits must not be scaled: ' .. mr.scale)
+
+    local minX, minY, maxX, maxY = nodes_on_screen(lm)
+    local cx, cy = (minX + maxX) / 2, (minY + maxY) / 2
+    assert(near(cx, 1280 / 2, 1e-6), 'map is not horizontally centered: ' .. cx)
+    assert(near(cy, 720 / 2, 1e-6), 'map is not vertically centered: ' .. cy)
+end)
+
+test('_layoutView fits and centers a map larger than the screen', function()
+    local lm = make_levelmap()
+    -- 1500x900 map: bigger than 1280x720, so it must be scaled down.
+    lm.nodes = {
+        { id = 1, x = 100, y = 100, radius = 25 },
+        { id = 2, x = 1600, y = 1000, radius = 25 },
+    }
+    lm:_layoutView()
+
+    local mr = lm.mapRenderer
+    assert(mr.scale < 1, 'an oversized map must be scaled down: ' .. mr.scale)
+
+    local minX, minY, maxX, maxY = nodes_on_screen(lm)
+    local cx, cy = (minX + maxX) / 2, (minY + maxY) / 2
+    assert(near(cx, 1280 / 2, 1e-6), 'oversized map not centered in X: ' .. cx)
+    assert(near(cy, 720 / 2, 1e-6), 'oversized map not centered in Y: ' .. cy)
+
+    -- And the whole map must actually be on screen.
+    assert(minX >= 0 and minY >= 0 and maxX <= 1280 and maxY <= 720,
+        ('map overflows the screen: %.0f,%.0f..%.0f,%.0f')
+            :format(minX, minY, maxX, maxY))
+end)
+
+test('the start node is driven toward the center by the intro', function()
+    local lm = make_levelmap()
+    lm.currentNode = lm.nodes[1]        -- start node at (300, 200)
+    lm:_layoutView()
+
+    local beforeScale = lm.mapRenderer.scale
+    local startX, startY = lm.mapRenderer:toScreen(300, 200)
+    local distBefore = math.sqrt((startX - 640) ^ 2 + (startY - 360) ^ 2)
+
+    lm:_startCameraIntro(lm.currentNode)
+    assert(lm.camIntro, 'intro did not start')
+
+    -- Run the whole flight in small steps, like frames.
+    local guard = 0
+    while lm.camIntro and guard < 10000 do
+        lm:_updateIntro(1 / 60)
+        guard = guard + 1
+    end
+    assert(guard < 10000, 'intro never finished')
+
+    local afterScale = lm.mapRenderer.scale
+    local endX, endY = lm.mapRenderer:toScreen(300, 200)
+    local distAfter = math.sqrt((endX - 640) ^ 2 + (endY - 360) ^ 2)
+
+    assert(afterScale > beforeScale, 'intro must zoom in')
+    assert(distBefore > 1, 'test fixture: the start node must not start centered')
+    assert(distAfter < 1,
+        ('start node did not end up centered: %.1f,%.1f (dist %.1f)')
+            :format(endX, endY, distAfter))
+    assert(lm.introSeen, 'intro completion must set introSeen')
+end)
+
+test('the intro offset is capped, so an edge node cannot corner the view', function()
+    local lm = make_levelmap()
+    lm:_layoutView()
+
+    -- A node hard against the top-left corner would pull the view far away.
+    local edge = { id = 3, x = 0, y = 0, radius = 25 }
+    lm:_startCameraIntro(edge)
+
+    local guard = 0
+    while lm.camIntro and guard < 10000 do
+        lm:_updateIntro(1 / 60)
+        guard = guard + 1
+    end
+
+    local mr = lm.mapRenderer
+    local sx, sy = mr:toScreen(0, 0)
+    assert(sx > 0 and sy > 0,
+        ('edge node was pushed off-screen by the intro: %d,%d'):format(sx, sy))
+end)
+
+test('a click during the intro skips it without selecting a node', function()
+    local lm = make_levelmap()
+    reset_ui()
+    lm:_layoutView()
+    lm:_startCameraIntro(lm.currentNode or lm.nodes[1])
+
+    local scaleAtClick = lm.mapRenderer.scale
+    lm:mousepressed(640, 360, 1)
+
+    assert(lm.camIntro == nil, 'click did not end the intro')
+    assert(lm.mapRenderer.scale == scaleAtClick, 'click kept animating')
+    assert(lm.dragSkippedIntro ~= false and lm.dragSkippedIntro ~= nil,
+        'the click was not recorded as an intro skip')
+
+    -- The intro must not swallow the camera further.
+    lm:_updateIntro(1)
+    assert(lm.mapRenderer.scale == scaleAtClick, 'camera moved after the skip')
+
+    -- Still moving the mouse with LMB held pans instead of clicking a node.
+    -- The click landed at (640, 360), 41 px from this move: past
+    -- DRAG_THRESHOLD, so it is a drag, not a click.
+    lm:mousemoved(660, 380)
+    assert(lm.panning, 'dragging after a skip did not pan')
+
+    local vx = lm.mapRenderer.viewX
+    lm:mousemoved(700, 400)
+    assert(lm.mapRenderer.viewX ~= vx, 'pan after a skip did not move the map')
+end)
+
+test('the mouse wheel also takes the camera from the intro', function()
+    local lm = make_levelmap()
+    reset_ui()
+    lm:_layoutView()
+    lm:_startCameraIntro(lm.nodes[1])
+
+    lm:wheelmoved(0, 1)
+    assert(lm.camIntro == nil, 'wheel did not end the intro')
+end)
+
+test('the intro never plays twice in one run', function()
+    local lm = make_levelmap()
+    lm.currentNode = lm.nodes[1]
+    lm:_layoutView()
+
+    lm:_startCameraIntro(lm.nodes[1])
+    lm:_endIntro()
+    assert(lm.introSeen, 'introSeen must survive a manual skip')
+
+    local saved = lm.introSeen and true or false
+    assert(lm:serialize().introSeen == saved, 'introSeen is not serialized')
+end)
+
+test('old saves (no introSeen field) are treated as already seen', function()
+    local lm = make_levelmap()
+    lm.seed = 4242
+    -- deserialize() re-generates the map; only the flag is under test here.
+    local data = lm:serialize()
+    data.introSeen = nil
+    lm.nodes, lm.pathes = {}, {}
+    lm:deserialize(data)
+    assert(lm.introSeen == true, 'a save without the flag must not replay the intro')
+end)
+
+-- ---------------------------------------------------------------------------
 -- Regressions: what must NOT change for the rest of the level map
 -- ---------------------------------------------------------------------------
 

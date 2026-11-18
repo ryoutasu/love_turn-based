@@ -1,5 +1,4 @@
 -- Отрисовка карты: связи между узлами (Path) и сами узлы (Node).
--- MapRenderer держит offset (отступ от края экрана) и вызывает draw у Path и Node.
 --
 -- Камера карты: узел — это точка в мировых координатах, на экран он попадает
 -- как screen = world * scale + x/y. Узлы, пути и подписи рисуются внутри
@@ -51,16 +50,10 @@ end
 -- ------------------------------------------------------------------
 local MapRenderer = Class{}
 
-function MapRenderer:init(offset)
-    self.offset = offset or 0
-
+function MapRenderer:init()
     self.scale  = 1   -- 1 = карта вписывается в экран при генерации
     self.viewX  = 0   -- экранный X мирового нуля
     self.viewY  = 0   -- экранный Y мирового нуля
-end
-
-function MapRenderer:setOffset(offset)
-    self.offset = offset
 end
 
 -- Сбрасывает камеру: карта 1:1 и отцентрована, как при генерации.
@@ -81,23 +74,26 @@ function MapRenderer:toWorld(x, y)
 end
 
 -- Зум вокруг экранной точки (sx, sy): точка под курсором остаётся на месте.
--- scale не выходит за [minScale, maxScale], viewX/viewY не трогаются, когда
--- масштаб уже упёрся в предел.
+-- scale не выходит за [minScale, maxScale]; когда масштаб уже упёрся в
+-- предел, вид не меняется вовсе.
 function MapRenderer:zoomAt(sx, sy, factor, minScale, maxScale)
     local old = self.scale
-    local new = old * factor
+    local new = self:_zoomScale(factor, minScale, maxScale)
+    if new == old then return end
+
+    -- Держим мировую точку под курсором на том же экранном месте.
+    -- screen = world * scale + view, значит view' = screen - (screen - view) * k.
+    local k = new / old
+    self.viewX = sx - (sx - self.viewX) * k
+    self.viewY = sy - (sy - self.viewY) * k
+    self.scale = new
+end
+
+function MapRenderer:_zoomScale(factor, minScale, maxScale)
+    local new = self.scale * factor
     if minScale then new = math.max(new, minScale) end
     if maxScale then new = math.min(new, maxScale) end
-
-    if new ~= old then
-        -- Держим мировую точку под курсором на том же экранном месте.
-        -- k = new / old: screen = world * scale + view, поэтому
-        -- view' = screen - (screen - view) * k.
-        local k = new / old
-        self.viewX = sx - (sx - self.viewX) * k
-        self.viewY = sy - (sy - self.viewY) * k
-        self.scale = new
-    end
+    return new
 end
 
 -- Сдвиг карты в экранных пикселях.

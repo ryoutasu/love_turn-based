@@ -458,17 +458,17 @@ function ui.handleKeyPress(key)
     end
 end
 
-    local outlinetextcoords = {
-        { -1, 0 },
-        { 1, 0 },
-        { 0, -1 },
-        { 0, 1 },
-        
-        { 1, 1 },
-        { 1, -1 },
-        { -1, 1 },
-        { -1, -1 },
-    }
+local outlinetextcoords = {
+    { -1, 0 },
+    { 1, 0 },
+    { 0, -1 },
+    { 0, 1 },
+    
+    { 1, 1 },
+    { 1, -1 },
+    { -1, 1 },
+    { -1, -1 },
+}
 
 function ui.draw()
     local hovered_state
