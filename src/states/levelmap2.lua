@@ -28,9 +28,9 @@ local DRAG_THRESHOLD = 4
 local PAN_EDGE_SLACK = 80
 
 -- Вступительная анимация камеры при первом заходе на карту в забеге.
-local INTRO_DELAY   = 1    -- сколько секунд показать карту целиком
-local INTRO_TIME    = 2.5  -- длительность полёта к начальному ноду
-local INTRO_ZOOM    = 1.5  -- во сколько раз приблизиться по дороге
+local INTRO_DELAY   = 0.4    -- сколько секунд показать карту целиком
+local INTRO_TIME    = 1.6  -- длительность полёта к начальному ноду
+local INTRO_ZOOM    = 1.2  -- во сколько раз приблизиться по дороге
 -- Поля вокруг карты при вписывании её в экран, px.
 local MAP_MARGIN    = 40
 
@@ -829,19 +829,15 @@ function Levelmap:_updateIntro(dt)
     local e = k * k * (3 - 2 * k)   -- smoothstep: плавные начало и конец
 
     self:_applyView(
-        self:_lerp(intro.fromScale, intro.toScale, e),
-        self:_lerp(intro.fromCX, intro.toCX, e),
-        self:_lerp(intro.fromCY, intro.toCY, e))
+        math.lerp(intro.fromScale, intro.toScale, e),
+        math.lerp(intro.fromCX, intro.toCX, e),
+        math.lerp(intro.fromCY, intro.toCY, e))
 
     if k >= 1 then
         self:_endIntro()
         return false
     end
     return true
-end
-
-function Levelmap:_lerp(a, b, t)
-    return a + (b - a) * t
 end
 
 -- Обрывает вступление там, где камера сейчас: дальше управляет игрок.

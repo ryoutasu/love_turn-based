@@ -65,7 +65,7 @@ end
 
 local lurker = require("lib.lurker")
 function love.update(dt)
-    lurker.update()
+    -- lurker.update()
     UI.update(dt)
 
     Particles:update(dt)
