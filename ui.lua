@@ -86,9 +86,19 @@ local function applyAnchor(x, y, w, h, anchor)
     return x - w * ax, y - h * ay
 end
 
+-- Защита от inf-геометрии: объект с бесконечным размером мышь не
+-- перехватывает. NaN-сравнения и так дают false.
+local function finiteBox(x, y, w, h)
+    return x > -math.huge and x < math.huge
+       and y > -math.huge and y < math.huge
+       and w > -math.huge and w < math.huge
+       and h > -math.huge and h < math.huge
+end
+
 -- Переработанная функция проверки взаимодействия
 local function checkInteraction(x, y, w, h)
     local mx, my = love.mouse.getPosition()
+    if not finiteBox(x, y, w, h) then return false end
     return (mx >= x and mx <= x + w and my >= y and my <= y + h)
 end
 
@@ -669,6 +679,26 @@ end
 
 function ui.getMouseButton(button)
     return mousebuttons[button]
+end
+
+-- Есть ли под точкой (x, y) отрисованный UI-элемент из переданного списка
+-- типов. Список — то, что само по себе кликабельно; подписи, бэкграунды и
+-- картинки мышь не «забирают».
+local INTERACTIVE_TYPES = { button = true, inputText = true, node = true }
+
+function ui.isOverInteractive(x, y, types)
+    types = types or INTERACTIVE_TYPES
+    for _, object in ipairs(to_draw) do
+        if types[object.type] then
+            local w, h = object.w or 0, object.h or 0
+            if finiteBox(object.x, object.y, w, h)
+                and x >= object.x and x <= object.x + w
+                and y >= object.y and y <= object.y + h then
+                return true
+            end
+        end
+    end
+    return false
 end
 
 return ui

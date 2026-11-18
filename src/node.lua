@@ -150,12 +150,34 @@ function Node:resolve_scene_id(player)
     return self.story_scene
 end
 
+-- Камера карты (то же преобразование, что применяет MapRenderer:draw).
+-- Ноды лежат в мировых координатах, а мышь — в экранных, поэтому все
+-- хитбоксы пересчитываются через неё. Без камеры world -> screen совпадает.
+local function mapCamera()
+    local levelmap = _G.Levelmap
+    local mr = levelmap and levelmap.mapRenderer
+    if not mr then return nil end
+    return mr
+end
+
+local function screenPos(node, mapRenderer)
+    if mapRenderer then return mapRenderer:toScreen(node.x, node.y) end
+    return node.x, node.y
+end
+
 function Node:update(dt)
     local mx, my = love.mouse.getPosition()
     local cursorInside = false
+    local mapRenderer = mapCamera()
 
-    local dx, dy = self.x - mx, self.y - my
-    if dx * dx + dy * dy <= self.radius * self.radius then
+    local nx, ny = screenPos(self, mapRenderer)
+
+    -- Радиус на экране масштабируется вместе с картой.
+    local scale = mapRenderer and mapRenderer.scale or 1
+    local radius = self.radius * scale
+
+    local dx, dy = nx - mx, ny - my
+    if dx * dx + dy * dy <= radius * radius then
         cursorInside = true
     end
 
@@ -213,7 +235,16 @@ function Node:draw()
         })
     end
 
-    local released, hovered = UI.node("node_"..self.id, self.x, self.y, nodeRadius, self.image, self.isDiscovered or DEBUG)
+    -- Хитбокс UI живёт в экранных координатах: нод рисуется внутри
+    -- трансформации камеры, а UI.node проверяет курсор без неё.
+    local mapRenderer = mapCamera()
+    local sx, sy, screenRadius = self.x, self.y, nodeRadius
+    if mapRenderer then
+        sx, sy = mapRenderer:toScreen(self.x, self.y)
+        screenRadius = nodeRadius * mapRenderer.scale
+    end
+
+    local released, hovered = UI.node("node_"..self.id, sx, sy, screenRadius, self.image, self.isDiscovered or DEBUG)
     if released then
         if self.isOpen then
             if not self.isCompleted then

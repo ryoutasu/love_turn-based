@@ -1,5 +1,11 @@
 -- Отрисовка карты: связи между узлами (Path) и сами узлы (Node).
 -- MapRenderer держит offset (отступ от края экрана) и вызывает draw у Path и Node.
+--
+-- Камера карты: узел — это точка в мировых координатах, на экран он попадает
+-- как screen = world * scale + x/y. Узлы, пути и подписи рисуются внутри
+-- love.graphics.push/pop, поэтому зум и панорамирование применяются ко всей
+-- карте разом. Хитбоксы нодов идут через UI и пересчитываются в экранные
+-- координаты тем же преобразованием (toScreen).
 
 local OPEN_LINE_WIDTH      = 3
 local CLOSED_LINE_WIDTH    = 1
@@ -19,8 +25,8 @@ function Path:init(edge)
     self.isCompleted = false
 end
 
-function Path:draw(offset)
-    offset = offset or 0
+-- Рисуется снаружи MapRenderer:draw, уже внутри трансформации камеры.
+function Path:draw()
     local edge = self.edge
 
     if self.isCompleted then
@@ -35,8 +41,8 @@ function Path:draw(offset)
     end
 
     love.graphics.line(
-        edge.p1.x + offset, edge.p1.y + offset,
-        edge.p2.x + offset, edge.p2.y + offset
+        edge.p1.x, edge.p1.y,
+        edge.p2.x, edge.p2.y
     )
 end
 
@@ -47,21 +53,74 @@ local MapRenderer = Class{}
 
 function MapRenderer:init(offset)
     self.offset = offset or 0
+
+    self.scale  = 1   -- 1 = карта вписывается в экран при генерации
+    self.viewX  = 0   -- экранный X мирового нуля
+    self.viewY  = 0   -- экранный Y мирового нуля
 end
 
 function MapRenderer:setOffset(offset)
     self.offset = offset
 end
 
+-- Сбрасывает камеру: карта 1:1 и отцентрована, как при генерации.
+function MapRenderer:resetView()
+    self.scale = 1
+    self.viewX = 0
+    self.viewY = 0
+end
+
+-- Мировые координаты -> экранные.
+function MapRenderer:toScreen(x, y)
+    return x * self.scale + self.viewX, y * self.scale + self.viewY
+end
+
+-- Экранные координаты -> мировые.
+function MapRenderer:toWorld(x, y)
+    return (x - self.viewX) / self.scale, (y - self.viewY) / self.scale
+end
+
+-- Зум вокруг экранной точки (sx, sy): точка под курсором остаётся на месте.
+-- scale не выходит за [minScale, maxScale], viewX/viewY не трогаются, когда
+-- масштаб уже упёрся в предел.
+function MapRenderer:zoomAt(sx, sy, factor, minScale, maxScale)
+    local old = self.scale
+    local new = old * factor
+    if minScale then new = math.max(new, minScale) end
+    if maxScale then new = math.min(new, maxScale) end
+
+    if new ~= old then
+        -- Держим мировую точку под курсором на том же экранном месте.
+        -- k = new / old: screen = world * scale + view, поэтому
+        -- view' = screen - (screen - view) * k.
+        local k = new / old
+        self.viewX = sx - (sx - self.viewX) * k
+        self.viewY = sy - (sy - self.viewY) * k
+        self.scale = new
+    end
+end
+
+-- Сдвиг карты в экранных пикселях.
+function MapRenderer:pan(dx, dy)
+    self.viewX = self.viewX + dx
+    self.viewY = self.viewY + dy
+end
+
 -- Рисует все связи, потом все узлы.
 -- Порядок важен: узлы должны быть поверх линий.
 function MapRenderer:draw(paths, nodes)
+    love.graphics.push()
+    love.graphics.translate(self.viewX, self.viewY)
+    love.graphics.scale(self.scale, self.scale)
+
     for _, path in ipairs(paths) do
-        path:draw(self.offset)
+        path:draw()
     end
     for _, node in ipairs(nodes) do
         node:draw()
     end
+
+    love.graphics.pop()
 end
 
 MapRenderer.Path = Path

@@ -16,6 +16,17 @@ local StoryPlacement        = require 'src.story.story_placement'
 local PlayerMetaStory       = require 'src.player_meta_story'
 local MasterGenerator       = require 'data.story.generators.master_generator'
 
+-- Камера карты.
+local ZOOM_MIN       = 0.35   -- насколько карту можно отдалить
+local ZOOM_MAX       = 2.5    -- и приблизить
+local ZOOM_STEP      = 1.12   -- множитель на одно деление колеса
+-- Сдвиг мыши на нажатой ЛКМ меньше этого (в пикселях) считается кликом, а не
+-- перетаскиванием. Иначе ноды не выбирались бы: UI отпускает кнопку только
+-- если курсор ещё внутри нода.
+local DRAG_THRESHOLD = 4
+-- На сколько карта должна выйти за экран, чтобы её можно было утащить за край.
+local PAN_EDGE_SLACK = 80
+
 ---@class Levelmap
 local Levelmap = {}
 
@@ -26,6 +37,14 @@ function Levelmap:init()
     self.active        = false
     self.mapRenderer   = MapRenderer(generator_offset)
     self.seed          = nil
+
+    -- Панорамирование: ЛКМ, зажатая на пустом месте карты.
+    self.panning       = false
+    self.panMoved      = false
+    self.panLastX      = 0
+    self.panLastY      = 0
+    self.panStartX     = 0
+    self.panStartY     = 0
 end
 
 -- ================================================================
@@ -320,6 +339,14 @@ function Levelmap:_generateMap()
 
     self.mode          = 'none'
     self.currentAction = nil
+
+    -- Карта строится под текущий размер экрана, поэтому камера стартует
+    -- сброшенной: 1:1, как было до появления зума.
+    -- mapRenderer может не быть: тесты собирают Levelmap без init().
+    if self.mapRenderer then
+        self.mapRenderer:resetView()
+    end
+    self:_resetPan()
 end
 
 -- ================================================================
@@ -525,10 +552,140 @@ function Levelmap:cancel_target_mode()
 end
 
 -- ================================================================
+-- Камера: зум колесом и панорамирование ЛКМ по пустому месту
+-- ================================================================
+
+-- Модальные окна карты (выбор апгрейда, выбор существа) перекрывают её
+-- целиком и сами ловят мышь.
+function Levelmap:_isModalOpen()
+    return (UpgradeSelectScreen and UpgradeSelectScreen:isActive())
+        or (CharacterSelectScreen and CharacterSelectScreen:isActive())
+end
+
+function Levelmap:_resetPan()
+    self.panning   = false
+    self.panMoved  = false
+    self.panLastX  = 0
+    self.panLastY  = 0
+end
+
+-- Экранная точка под курсором и в каком узле он сейчас лежит.
+-- Ноды в мировых координатах, курсор — в экранных, поэтому и считаем через
+-- камеру, а не через node.cursorInside (его обновляет Node:update).
+function Levelmap:_nodeAtScreen(sx, sy)
+    local wx, wy = self.mapRenderer:toWorld(sx, sy)
+    local scale  = self.mapRenderer.scale
+
+    for _, node in ipairs(self.nodes) do
+        local dx, dy = node.x - wx, node.y - wy
+        local radius = node.radius * scale
+        if dx * dx + dy * dy <= radius * radius then
+            return node
+        end
+    end
+    return nil
+end
+
+-- Отступ при ограничении панорамирования: не даём крайним нодам целиком
+-- уехать за экран.
+local PAN_PADDING = 25
+
+-- Нажатие ЛКМ на пустом месте карты начинает панорамирование.
+function Levelmap:_beginPan(x, y)
+    self.panning   = true
+    self.panMoved  = false
+    self.panLastX  = x
+    self.panLastY  = y
+    self.panStartX = x
+    self.panStartY = y
+end
+
+-- Двигает камеру за курсором. Пока сдвиг меньше порога, это ещё не
+-- перетаскивание: ноды продолжают реагировать как на обычный клик.
+function Levelmap:_updatePan(x, y)
+    if not self.panning then return end
+
+    local dx, dy = x - self.panLastX, y - self.panLastY
+    if dx == 0 and dy == 0 then return end
+
+    self.panLastX, self.panLastY = x, y
+
+    if not self.panMoved then
+        local startX = self.panStartX or x
+        local startY = self.panStartY or y
+        local total = (x - startX) ^ 2 + (y - startY) ^ 2
+        if total < DRAG_THRESHOLD * DRAG_THRESHOLD then
+            return
+        end
+        self.panMoved = true
+    end
+
+    self.mapRenderer:pan(dx, dy)
+    self:_clampPan()
+end
+
+-- Не даёт утащить карту целиком за край экрана: хотя бы часть карты всегда
+-- остаётся видимой.
+function Levelmap:_clampPan()
+    if #self.nodes == 0 then return end
+
+    local mr = self.mapRenderer
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
+    for _, node in ipairs(self.nodes) do
+        minX, maxX = math.min(minX, node.x), math.max(maxX, node.x)
+        minY, maxY = math.min(minY, node.y), math.max(maxY, node.y)
+    end
+
+    -- Экранные координаты крайних точек карты:
+    --   left = minX * scale + view, right = maxX * scale + view.
+    -- Допустим: left не правее (screenSize + margin) и right не левее
+    -- (-margin). Иначе карта уехала за экран целиком.
+    local function clampAxis(view, lo, hi, screenSize)
+        local margin  = PAN_EDGE_SLACK
+        local maxView = screenSize + margin - lo * mr.scale - PAN_PADDING
+        local minView = -hi * mr.scale - margin + PAN_PADDING
+        if minView > maxView then
+            -- Карта уже экрана — держим её в пределах.
+            return math.min(math.max(view, maxView), minView)
+        end
+        return math.min(math.max(view, minView), maxView)
+    end
+
+    mr.viewX = clampAxis(mr.viewX, minX, maxX, love.graphics.getWidth())
+    mr.viewY = clampAxis(mr.viewY, minY, maxY, love.graphics.getHeight())
+end
+
+-- Колесо мыши: зум карты (узлы, пути, подписи) вокруг курсора.
+function Levelmap:wheelmoved(x, y)
+    if not self:isActive() then return end
+    if self:_isModalOpen() then return end
+
+    local wheel = y or x
+    if not wheel or wheel == 0 then return end
+
+    local mx, my = love.mouse.getPosition()
+    local factor = wheel > 0 and ZOOM_STEP or (1 / ZOOM_STEP)
+    self.mapRenderer:zoomAt(mx, my, factor, ZOOM_MIN, ZOOM_MAX)
+    self:_clampPan()
+end
+
+-- ================================================================
 -- Update / draw / input
 -- ================================================================
 
 function Levelmap:update(dt)
+    if self.active then
+        local mx, my = love.mouse.getPosition()
+        if self.panning then
+            if love.mouse.isDown(1) then
+                self:_updatePan(mx, my)
+            else
+                self:_resetPan()
+            end
+        end
+    end
+
     for _, node in ipairs(self.nodes) do
         node:update(dt)
     end
@@ -584,13 +741,38 @@ function Levelmap:draw()
 end
 
 function Levelmap:mousepressed(x, y, button)
-    if UpgradeSelectScreen:isActive() then return end
-    if CharacterSelectScreen:isActive() then return end
+    if self:_isModalOpen() then return end
+    if button ~= 1 then return end
+
+    -- Пустое место карты: ни нод, ни кликабельного элемента интерфейса
+    -- (кнопка Camp, сердца, подписи) — начинаем панорамирование.
+    -- Хитбоксы UI — это последний отрисованный кадр, а он всегда есть:
+    -- mousepressed приходит уже после первого draw.
+    if self:_nodeAtScreen(x, y) then return end
+    if UI.isOverInteractive and UI.isOverInteractive(x, y) then return end
+
+    self:_beginPan(x, y)
+end
+
+function Levelmap:mousemoved(x, y)
+    if not self.panning then return end
+    self:_updatePan(x, y)
+end
+
+function Levelmap:mousereleased(x, y, button)
+    if button ~= 1 then return end
+    if not self.panning then return end
+
+    self:_updatePan(x, y)
+    self:_resetPan()
 end
 
 function Levelmap:keypressed(key)
     if key == "f3" and not UpgradeSelectScreen:isActive() then
         UpgradeSelectScreen:open(self.player)
+    elseif key == "home" then
+        -- Возврат к виду по умолчанию (карта вписана в экран).
+        self.mapRenderer:resetView()
     end
 end
 
