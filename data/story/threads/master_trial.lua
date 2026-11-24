@@ -1,4 +1,4 @@
--- Main narrative thread: approach the current dojo master, choose a path,
+-- Main narrative thread: approach the current dojo master, find the key,
 -- reach the boss. Deterministic per (master, campaign) — the graph is the
 -- same across retries so the story is consistent; only the map layout rerolls.
 
@@ -22,21 +22,23 @@ return {
 
     -- Deterministic scene graph. Depends only on campaign/master state.
     --
-    --   start (arrival) -> crossroads
-    --   crossroads -> branches { shortcut, scenic }
-    --   shortcut (gate) -> boss
+    --   start (arrival) -> scenic
     --   scenic (find_key, grants run_key) -> boss
     --   boss: is_boss, requires run_key, alt_when_locked = master_boss_angry
     --
     -- Narrative intent:
-    --   * Shortcut = fewer nodes, but you arrive at the gate with nothing.
-    --   * Scenic  = one extra node, but you pick up the key on the way.
-    --   * If the player is impatient, the boss is angry (alt_when_locked).
-    --   * If the player explores, the boss is normal.
+    --   * `scenic` is the key. It is NOT placed next to the start: with
+    --     fog of war the player has to go looking for it (see `roaming`).
+    --   * Reaching the boss without the key is allowed, but the master is
+    --     angry (alt_when_locked = master_boss_angry).
     --
     -- alt_when_locked is a SCENE id, not a graph node id: Node:resolve_scene_id
     -- returns it verbatim and the caller looks it up in Scenes[]. The angry
     -- boss is a variant of this node, not a second node on the map.
+    --
+    -- `roaming` is a PLACEMENT hint, not an edge: StoryPlacement puts that
+    -- scene on any free node between the start and the boss instead of on a
+    -- neighbour of its parent. SceneGraph ignores it.
     build = function(ctx)
         local m = ctx.master
         if not m then return nil end
@@ -44,20 +46,13 @@ return {
         return {
             start = {
                 scene = 'master_arrival',
-                next  = 'crossroads',
-            },
-            crossroads = {
-                scene    = 'master_crossroads',
-                branches = { 'shortcut', 'scenic' },
-            },
-            shortcut = {
-                scene = 'master_gate',
-                next  = 'boss',
+                next  = 'scenic',
             },
             scenic = {
-                scene  = 'master_find_key',
-                next   = 'boss',
-                grants = { run_key = 'dojo_key' },
+                scene   = 'master_find_key',
+                next    = 'boss',
+                grants  = { run_key = 'dojo_key' },
+                roaming = true,
             },
             boss = {
                 scene           = 'master_boss',

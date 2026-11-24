@@ -330,15 +330,20 @@ test('Case B2: graph still stands on the boss node after the angry scene', funct
 end)
 
 -- ===========================================================================
--- Case C — crossroads close does NOT fire on_complete (Bug 3)
+-- Case C — a mid-thread scene close does NOT fire on_complete (Bug 3)
 -- ===========================================================================
+-- Bug 3 was `not moved OR terminal`, which fired on_complete on any node with
+-- no `.next` — e.g. a branch node — marking the master defeated before the
+-- boss fight. The graph now is start -> scenic -> boss, so `scenic` is the
+-- only non-boss story node with a successor: closing it must advance the
+-- thread, not complete it.
 
-test('Case C: closing crossroads does not complete the thread', function()
+test('Case C: closing scenic does not complete the thread', function()
     gamestateCalls = {}
     local player = make_player()
     local lm     = build_map(player)
-    local cross  = find_story(lm, 'crossroads')
-    assert(cross, 'crossroads node was not placed')
+    local scenic = find_story(lm, 'scenic')
+    assert(scenic, 'scenic node was not placed')
 
     local master_id = player.meta_story.current_master_id
     local master    = player.meta_story.masters[master_id]
@@ -350,16 +355,22 @@ test('Case C: closing crossroads does not complete the thread', function()
         return real_on_victory(...)
     end
 
-    Levelmap._handle_story_node_complete(lm, cross)
+    Levelmap._handle_story_node_complete(lm, scenic)
     MasterGenerator.on_victory = real_on_victory
 
     assert(calls == 0,
-        ('MasterGenerator.on_victory fired %d time(s) on a branch node — '
+        ('MasterGenerator.on_victory fired %d time(s) on a mid-thread scene — '
          .. 'the master is marked defeated before the boss fight'):format(calls))
     assert(master.defeated == false,
-        'master was marked defeated at the crossroads')
+        'master was marked defeated at the scenic node')
     assert(player.meta_story.current_master_id == master_id,
-        'current_master_id advanced at the crossroads')
+        'current_master_id advanced at the scenic node')
+
+    -- The thread advanced to the boss node but is not finished: the boss
+    -- still has to be played.
+    assert(RunState.story and RunState.story.node_id == 'boss',
+        ('story node_id after scenic is %q, expected "boss"')
+            :format(tostring(RunState.story and RunState.story.node_id)))
 end)
 
 -- ===========================================================================

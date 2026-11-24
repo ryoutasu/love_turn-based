@@ -318,10 +318,10 @@ test('A2 every reachable scene id is placed', function()
     assert(#missing == 0,
         ('these graph scenes were not placed: %s'):format(table.concat(missing, ', ')))
 
-    -- master_trial after the boss_angry collapse:
-    --   start -> crossroads -> {shortcut, scenic} -> boss
-    assert(#expected == 5,
-        ('expected 5 reachable graph scenes, saw %d: %s')
+    -- master_trial after the crossroads/shortcut removal:
+    --   start -> scenic -> boss
+    assert(#expected == 3,
+        ('expected 3 reachable graph scenes, saw %d: %s')
             :format(#expected, table.concat(expected, ', ')))
 end)
 
@@ -368,106 +368,136 @@ test('A5 the boss keeps its run-key gate and points at the angry scene', functio
             :format(tostring(boss.alt_when_locked)))
 end)
 
--- A6 and its friends. Equal BFS depth for sibling arms is NOT an invariant on a
--- hex lattice: a child can sit on a hex shared with its grandparent, so one arm
--- may legitimately be closer to the start than the other. What matters is:
---   A6'   the narrative shortcut is not longer than the scenic route;
---   A6''  (observation only) whether an arm bypasses the fork scene;
---   A6''' at least one arm is NOT adjacent to the start, so the fork can be
---         played by a player who takes that route.
+-- A6 and its friends. The crossroads fork is gone: master_trial is now
+--   start -> scenic (roaming) -> boss
+-- `scenic` is the key scene, so its placement is what can break the thread:
+--   A6    scenic is placed exactly once, and never on start/end;
+--   A6'   scenic is reachable from the start WITHOUT going through the boss
+--         (otherwise the key can never be collected and the boss is always
+--         angry — an unwinnable thread);
+--   A6''  scenic is not pinned next to the start (the reason `roaming` exists);
+--   A6b   scenic is NOT always the same slot: it varies across seeds.
 
-local function arms(lm)
-    -- Look up by graph id: the scene ids differ (crossroads -> master_crossroads).
-    local start    = find_story_by_id(lm, 'start')[1]
-    local cross    = find_story_by_id(lm, 'crossroads')[1]
-    local shortcut = find_story_by_id(lm, 'shortcut')[1]
-    local scenic   = find_story_by_id(lm, 'scenic')[1]
-    assert(start,    'start node was not placed')
-    assert(cross,    'crossroads node was not placed')
-    assert(shortcut, 'shortcut node was not placed')
-    assert(scenic,   'scenic node was not placed')
-    assert(#find_story_by_id(lm, 'crossroads') == 1,
-        ('expected exactly 1 crossroads node, got %d')
-            :format(#find_story_by_id(lm, 'crossroads')))
-    return start, cross, shortcut, scenic
+local function start_and_scenic(lm)
+    local start  = find_story_by_id(lm, 'start')[1]
+    local scenic = find_story_by_id(lm, 'scenic')[1]
+    assert(start,  'start node was not placed')
+    assert(scenic, 'scenic node was not placed')
+    return start, scenic
 end
 
-test("A6' the shortcut is not longer than the scenic route", function()
+test('A6 scenic is placed once and never on start or end', function()
     local lm = build_map(make_player())
-    local start, _, shortcut, scenic = arms(lm)
+    local start, scenic = start_and_scenic(lm)
 
-    local dist = node_distances(lm, start)
-    local d_shortcut = dist[shortcut]
-    local d_scenic   = dist[scenic]
+    assert(#find_story_by_id(lm, 'scenic') == 1,
+        ('expected exactly 1 scenic node, got %d')
+            :format(#find_story_by_id(lm, 'scenic')))
 
-    assert(d_shortcut ~= nil, 'shortcut is unreachable from the placed start')
-    assert(d_scenic   ~= nil, 'scenic is unreachable from the placed start')
+    assert(scenic ~= start,
+        'scenic was placed on the start node — the player would never choose it')
+    assert(scenic.original_type ~= 'end',
+        ('scenic was placed on the map end node (original_type=%q)')
+            :format(tostring(scenic.original_type)))
 
-    -- master_trial.lua: "Shortcut = fewer nodes, Scenic = one extra node".
-    if d_shortcut > d_scenic then
-        local adj = build_adjacency(lm)
-        local function fmt(node)
-            local parts = {}
-            for _, n in ipairs(adj[node] or {}) do
-                parts[#parts + 1] = tostring(n.id)
+    local boss = find_story(lm, 'master_boss')[1]
+    assert(boss, 'master_boss node was not placed')
+    assert(scenic ~= boss, 'scenic was placed on the boss node')
+    assert(ADJ(lm, scenic.point, boss.point) == false
+           or scenic.point ~= boss.point,
+        'scenic and boss must not share a point')
+end)
+
+test("A6' scenic is reachable from the start without passing the boss", function()
+    local lm = build_map(make_player())
+    local start, scenic = start_and_scenic(lm)
+
+    local boss = find_story(lm, 'master_boss')[1]
+    assert(boss, 'master_boss node was not placed')
+
+    -- BFS that refuses to enter the boss node: the key must be collectable
+    -- BEFORE the gate it unlocks.
+    local adj = build_adjacency(lm)
+    local dist = { [start] = 0 }
+    local q = { start }
+    local head = 1
+    while head <= #q do
+        local cur = q[head]; head = head + 1
+        for _, nxt in ipairs(adj[cur] or {}) do
+            if nxt ~= boss and dist[nxt] == nil then
+                dist[nxt] = dist[cur] + 1
+                q[#q + 1] = nxt
             end
-            return ('idx%s [%s]'):format(tostring(node.id), table.concat(parts, ','))
         end
-        error(('shortcut is longer than scenic: shortcut dist=%d %s, '
-            .. 'scenic dist=%d %s'):format(d_shortcut, fmt(shortcut),
-            d_scenic, fmt(scenic)), 0)
     end
+
+    assert(dist[scenic] ~= nil,
+        ('scenic (idx %s) is unreachable from start (idx %s) without entering '
+         .. 'the boss node — dojo_key can never be obtained')
+            :format(tostring(scenic.id), tostring(start.id)))
 end)
 
-test("A6'' note whether an arm bypasses the fork scene", function()
-    local lm = build_map(make_player())
-    local start, _, shortcut, scenic = arms(lm)
+test("A6'' scenic is not always adjacent to the start", function()
+    -- The regression this guards: with `next`-only placement scenic is forced
+    -- onto a neighbour of start (distance 1) on EVERY seed, so the key is
+    -- picked up automatically and the fog of war means nothing.
+    --
+    -- Second regression, found while implementing roaming: the first draw of a
+    -- fresh Park-Miller generator is ~1e-5, so an index computed from it always
+    -- lands on the nearest ring. StoryPlacement warms the stream up; this test
+    -- fails if that ever regresses.
+    local distances = {}
+    local local_seeds = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }
 
-    local bypass = {}
-    if ADJ(lm, start.point, shortcut.point) then bypass[#bypass + 1] = 'shortcut' end
-    if ADJ(lm, start.point, scenic.point)   then bypass[#bypass + 1] = 'scenic' end
+    for _, seed in ipairs(local_seeds) do
+        local lm = build_map(make_player(seed), { seed = seed })
+        if lm.story and lm.story.graph then
+            local start, scenic = start_and_scenic(lm)
+            local dist = node_distances(lm, start, build_adjacency(lm))
+            distances[#distances + 1] = dist[scenic]
+        end
+    end
 
-    for _, id in ipairs(bypass) do
-        print(('         note bypass: %s is adjacent to start; crossroads scene can be skipped')
-            :format(id))
+    assert(#distances > 0, 'no seed produced a placed story — nothing measured')
+    print(('         scenic distances from start (seeds 1..%d): %s')
+        :format(#local_seeds, table.concat(distances, ', ')))
+
+    local far = 0
+    for _, d in ipairs(distances) do
+        if d and d > 1 then far = far + 1 end
     end
-    if #bypass == 0 then
-        print('         note bypass: none — both arms route through crossroads')
-    end
-    -- Observation only: never fails.
+
+    assert(far > 0,
+        ('scenic is adjacent to the start on ALL %d measured seeds — `roaming` '
+         .. 'is not taking effect (or the RNG is drawing a cold first value)')
+            :format(#distances))
 end)
 
-test("A6''' at least one arm is not adjacent to the start", function()
-    local lm = build_map(make_player())
-    local start, _, shortcut, scenic = arms(lm)
+test('A6b scenic position varies across seeds', function()
+    -- Roaming must actually roam: otherwise it is a fixed slot with extra steps.
+    local slots = {}
+    local n = 0
+    for seed = 1, 12 do
+        local lm = build_map(make_player(seed), { seed = seed })
+        if lm.story and lm.story.graph then
+            local _, scenic = start_and_scenic(lm)
+            slots[#slots + 1] = tostring(scenic.id)
+            n = n + 1
+        end
+    end
 
-    local shortcut_bypasses = ADJ(lm, start.point, shortcut.point)
-    local scenic_bypasses   = ADJ(lm, start.point, scenic.point)
+    local distinct = {}
+    for _, s in ipairs(slots) do distinct[s] = true end
+    local count = 0
+    for _ in pairs(distinct) do count = count + 1 end
 
-    assert(not (shortcut_bypasses and scenic_bypasses),
-        ('BOTH arms bypass the fork: start~shortcut=%s, start~scenic=%s '
-         .. '— the crossroads choice is entirely skippable')
-            :format(tostring(shortcut_bypasses), tostring(scenic_bypasses)))
-    print(('         start~shortcut=%s start~scenic=%s')
-        :format(tostring(shortcut_bypasses), tostring(scenic_bypasses)))
-end)
+    print(('         scenic slots across %d seeds: %d distinct (%s)')
+        :format(n, count, table.concat(slots, ', ')))
 
-test('A6b both arms are adjacent to crossroads', function()
-    local lm = build_map(make_player())
-    local _, cross, shortcut, scenic = arms(lm)
-
-    assert(ADJ(lm, cross.point, shortcut.point),
-        ('shortcut must be adjacent to crossroads (crossroads idx=%s, shortcut idx=%s)')
-            :format(tostring(cross.id), tostring(shortcut.id)))
-    assert(ADJ(lm, cross.point, scenic.point),
-        ('scenic must be adjacent to crossroads (crossroads idx=%s, scenic idx=%s)')
-            :format(tostring(cross.id), tostring(scenic.id)))
-
-    -- Sibling-sibling adjacency is NOT asserted here: on a hex lattice two
-    -- neighbours of a shared parent are often adjacent to each other, and
-    -- requiring otherwise starved placement. Recorded, not checked.
-    print(('         shortcut~scenic=%s (informational)')
-        :format(tostring(ADJ(lm, shortcut.point, scenic.point))))
+    assert(count > 1,
+        ('scenic landed on the same map slot for every seed (%s) — placement '
+         .. 'is deterministic per seed but not varying across seeds')
+            :format(table.concat(slots, ', ')))
 end)
 
 test('A7 the master-boss node is reachable from the placed start', function()

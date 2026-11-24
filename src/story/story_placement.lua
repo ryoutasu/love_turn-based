@@ -56,6 +56,18 @@ local function index_map(nodes)
     return by_point, by_index
 end
 
+--- All map nodes in a fixed order (node id, then point key as a fallback).
+--- The generator's `pairs()` order is not stable, so anything that picks the
+--- "first" map node has to sort first.
+local function sorted_by_id(by_point)
+    local list = {}
+    for _, node in pairs(by_point) do list[#list + 1] = node end
+    table.sort(list, function(a, b)
+        return (a.id or 0) < (b.id or 0)
+    end)
+    return list
+end
+
 --- Map neighbours of a node, from the generator's point neighbours.
 local function neighbours(node)
     local out = {}
@@ -182,8 +194,18 @@ end
 ---        rejected unless it has at least that many free usable neighbours,
 ---        otherwise committing to it dooms a later sibling (the classic
 ---        crossroads-with-one-free-slot failure).
-local function candidates_for(parent_nodes, used, start_node, by_point, from_start, rng, avoid, levelmap, is_boss, needs)
+--- @param opts     table|nil { roaming = bool, before = map node|nil }
+---        roaming: place anywhere on the map, ignoring parent adjacency.
+---        Used by optional finder scenes (`scenic`) that must NOT always sit
+---        one step from the start: the player has to choose to go looking.
+---        `before`: candidates must be strictly closer to the start than this
+---        node (the boss). A key scene sitting beyond the gate it unlocks
+---        would be unreachable, so the key could never be collected.
+local function candidates_for(parent_nodes, used, start_node, by_point, from_start, rng, avoid, levelmap, is_boss, needs, opts)
     needs = needs or 0
+    opts  = opts or {}
+    local roaming = opts.roaming or false
+    local before  = opts.before
     local maps = {}
     for _, node in pairs(by_point) do maps[#maps + 1] = node end
     table.sort(maps, function(a, b)
@@ -199,15 +221,45 @@ local function candidates_for(parent_nodes, used, start_node, by_point, from_sta
         if not used[node] and node ~= start_node and is_usable(node, start_node, is_boss) then
             local best = 0
             local fits = true
-            for i = 1, #reach do
-                local d = reach[i][node]
+            if roaming then
+                -- Ignore the parent: any free usable node qualifies, provided
+                -- the start can reach it conservatively (the map is a connected
+                -- lattice, but from_start also encodes "reachable at all").
+                local d = from_start[node]
                 if d == nil then
                     fits = false
-                    break
+                else
+                    best = d
                 end
-                if d > best then best = d end
+            else
+                for i = 1, #reach do
+                    local d = reach[i][node]
+                    if d == nil then
+                        fits = false
+                        break
+                    end
+                    if d > best then best = d end
+                end
             end
-            local limit = #reach == 1 and 1 or MERGE_REACH
+            local limit
+            if roaming then
+                -- No distance ceiling: "any point except start and end".
+                -- The `before` guard below keeps it on the near side of the boss.
+                limit = math.huge
+            elseif #reach == 1 then
+                limit = 1
+            else
+                limit = MERGE_REACH
+            end
+            -- A roaming scene must not land past the gate that its own key
+            -- unlocks: the boss sits on the map's 'end' node, so anything at or
+            -- beyond the boss' distance from the start is unreachable first.
+            if fits and before and from_start[before] ~= nil then
+                if from_start[node] == nil
+                   or from_start[node] >= from_start[before] then
+                    fits = false
+                end
+            end
             if fits and best <= limit then
                 local touches_earlier = false
                 for other in pairs(avoid or {}) do
@@ -237,33 +289,66 @@ local function candidates_for(parent_nodes, used, start_node, by_point, from_sta
     -- A seeded draw is used ONLY to break a tie on both criteria, so the RNG
     -- is consumed in a well-defined order and never for scenes that had a
     -- single sensible slot.
-    for _, entry in ipairs(out) do
-        entry.forward = from_start[entry.node] or 0
-        entry.jitter  = 0
-    end
-    table.sort(out, function(a, b)
-        if a.near ~= b.near then return a.near < b.near end
-        return a.forward > b.forward
-    end)
-    local i = 1
-    while i <= #out do
-        local j = i
-        while j < #out
-            and out[j + 1].near == out[i].near
-            and out[j + 1].forward == out[i].forward do
-            j = j + 1
+    --
+    -- Roaming scenes invert this: distance to the parent carries no meaning.
+    --
+    -- A uniform draw over all candidates would let the widest ring win: on a
+    -- hex lattice the number of nodes at distance 1 is comparable to the total
+    -- of all deeper rings, so ~half of all seeds parked the scene next to the
+    -- start anyway. Choosing a DISTANCE first and then a node within that band
+    -- gives every reachable distance an equal chance, which is what "somewhere
+    -- on the map" should mean.
+    if roaming then
+        local bands, band_of = {}, {}
+        for _, entry in ipairs(out) do
+            local d = from_start[entry.node] or 0
+            if not band_of[d] then
+                band_of[d] = {}
+                bands[#bands + 1] = d
+            end
+            table.insert(band_of[d], entry)
         end
-        if j > i and rng then
-            for k = i, j do out[k].jitter = rng() end
-            local slice = {}
-            for k = i, j do slice[#slice + 1] = out[k] end
-            table.sort(slice, function(a, b)
-                if a.jitter ~= b.jitter then return a.jitter < b.jitter end
-                return (a.node.id or 0) < (b.node.id or 0)
-            end)
-            for k = i, j do out[k] = slice[k - i + 1] end
+        table.sort(bands)
+
+        if rng and #bands > 0 then
+            -- rng() is a plain float closure here, so the 1..n draw is done
+            -- by hand from a single deterministic sample.
+            local band = bands[math.min(#bands, math.floor(rng() * #bands) + 1)]
+            local bucket = band_of[band]
+            local pick = bucket[math.min(#bucket, math.floor(rng() * #bucket) + 1)]
+            out        = { pick }
+        else
+            out = {}
         end
-        i = j + 1
+    else
+        for _, entry in ipairs(out) do
+            entry.forward = from_start[entry.node] or 0
+            entry.jitter  = 0
+        end
+        table.sort(out, function(a, b)
+            if a.near ~= b.near then return a.near < b.near end
+            return a.forward > b.forward
+        end)
+        local i = 1
+        while i <= #out do
+            local j = i
+            while j < #out
+                and out[j + 1].near == out[i].near
+                and out[j + 1].forward == out[i].forward do
+                j = j + 1
+            end
+            if j > i and rng then
+                for k = i, j do out[k].jitter = rng() end
+                local slice = {}
+                for k = i, j do slice[#slice + 1] = out[k] end
+                table.sort(slice, function(a, b)
+                    if a.jitter ~= b.jitter then return a.jitter < b.jitter end
+                    return (a.node.id or 0) < (b.node.id or 0)
+                end)
+                for k = i, j do out[k] = slice[k - i + 1] end
+            end
+            i = j + 1
+        end
     end
 
     local nodes = {}
@@ -330,6 +415,16 @@ function StoryPlacement.place(levelmap, player, runState, opts)
     local from_start = map_distances(start_node, by_point)
     local rng = runState and runState.random and function() return runState:random() end or nil
 
+    -- Warm-up draw. The first value a fresh Park-Miller generator produces is
+    -- ~1e-5 (see AGENTS.md, "The Park-Miller RNG stub needs warm-up draws"):
+    -- a single-draw index computed from it always lands in bucket 1, so every
+    -- roaming scene would be placed on the nearest ring. A few draws take the
+    -- stream past the cold start; placement then no longer depends on whether
+    -- anything else has consumed RNG before it.
+    if rng then
+        for _ = 1, 4 do rng() end
+    end
+
     -- How many graph children each scene has. A scene is only allowed on a map
     -- node with at least that many free usable neighbours, so siblings are
     -- guaranteed a slot before the parent is committed.
@@ -351,7 +446,26 @@ function StoryPlacement.place(levelmap, player, runState, opts)
     local node_of   = { start = start_node }
     local parent_of = {}          -- scene id -> { parent ids }, from the BFS
 
-    for _, entry in ipairs(graph_order(graph)) do
+    local order = graph_order(graph)
+
+    -- Boss scenes claim the map's single 'end' node and a roaming scene must
+    -- stay on the near side of that gate, so the boss is resolved FIRST even if
+    -- the BFS reaches it later. `boss_node` stays nil when the graph has no
+    -- boss: the loop below then runs in plain BFS order, exactly as before.
+    local boss_node
+    for _, entry in ipairs(order) do
+        if graph[entry.id].is_boss then
+            for _, node in ipairs(sorted_by_id(by_point)) do
+                if not used[node] and is_usable(node, start_node, true) then
+                    boss_node = node
+                    break
+                end
+            end
+            break
+        end
+    end
+
+    for _, entry in ipairs(order) do
         parent_of[entry.id] = entry.parents
 
         local parent_nodes = {}
@@ -370,6 +484,11 @@ function StoryPlacement.place(levelmap, player, runState, opts)
         -- exactly one, so adjacency cannot be honoured there: a boss is a
         -- narrative terminus, not a leg of the fork.
         local is_boss = graph[entry.id].is_boss or false
+
+        -- A roaming scene (`roaming = true` on the graph node) is placed on any
+        -- free usable node instead of next to its parent — but never at or
+        -- beyond the boss, whose gate it may be the key to.
+        local roaming = (not is_boss) and (graph[entry.id].roaming == true)
 
         local ranked
         if is_boss then
@@ -395,18 +514,19 @@ function StoryPlacement.place(levelmap, player, runState, opts)
             return nil
         end
 
-        if not is_boss then
+        if roaming then
+            -- Any free usable node, seeded tie-break, never past the boss.
+            ranked = candidates_for(parent_nodes, used, start_node, by_point,
+                from_start, rng, nil, levelmap, false, 0,
+                { roaming = true, before = boss_node })
+        end
+
+        if not is_boss and not roaming then
             local needs = child_count[entry.id] or 0
 
             -- A scene must not sit next to the map start unless its parent IS
-            -- the start scene. In this hex lattice one of crossroads' neighbours
-            -- is also adjacent to the arrival node, so shortcut read as depth 1
-            -- and the branch looked shorter than it is.
-            --
-            -- Only the start is excluded. Excluding every earlier scene starved
-            -- the branch instead: scenic was left with a single candidate, so
-            -- shortcut had nothing left to pair with and took the start-adjacent
-            -- slot anyway.
+            -- the start scene: on this hex lattice a child of the start's child
+            -- can share a hex with the start itself.
             local avoid
             if node_of[entry.parents[1]] ~= start_node then
                 avoid = { [start_node] = true }
