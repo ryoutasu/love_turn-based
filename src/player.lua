@@ -634,6 +634,7 @@ function Player:drawCharacterList()
         local max_en = math.floor(stats:get('max_energy'))
         local cur_hp = math.min(character.health or max_hp, max_hp)
         local cur_en = math.min(character.energy or max_en, max_en)
+        local fatigue = character.fatigue
 
         UI.setStyle({ draw_border = true, border_color = { 0, 0, 0, 1 } })
         UI.setFont(statWindowFont)
@@ -658,8 +659,11 @@ function Player:drawCharacterList()
         UI.nextPosition("BOTTOMLEFT")
         UI.text(0, textOffset, "Health: " .. cur_hp .. "/" .. max_hp, "TOPLEFT")
 
+        -- UI.nextPosition("BOTTOMLEFT")
+        -- UI.text(0, textOffset, "Energy: " .. cur_en .. "/" .. max_en, "TOPLEFT")
+
         UI.nextPosition("BOTTOMLEFT")
-        UI.text(0, textOffset, "Energy: " .. cur_en .. "/" .. max_en, "TOPLEFT")
+        UI.text(0, textOffset, "Fatigue: " .. fatigue .. "/100", "TOPLEFT")
 
         UI.nextPosition("BOTTOMLEFT")
         UI.text(0, textOffset, "Damage: " .. math.floor(stats:get('damage')), "TOPLEFT")

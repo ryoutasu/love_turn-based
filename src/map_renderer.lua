@@ -10,7 +10,7 @@ local OPEN_LINE_WIDTH      = 3
 local CLOSED_LINE_WIDTH    = 1
 local OPEN_COLOR           = { 1,   1,   1,   1 }
 local COMPLETED_COLOR      = { 0.3, 0.3, 0.3, 1 }
-local CLOSED_COLOR         = { 0,   0,   0,   1 }
+local CLOSED_COLOR         = { 0,   0,   0,   0 }
 
 -- ------------------------------------------------------------------
 -- Path — связь между двумя узлами.

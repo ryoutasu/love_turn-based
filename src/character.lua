@@ -147,9 +147,4 @@ function Character.deserialize(data)
     return c
 end
 
--- function Character.getStats(c, runModifiers) ... end
--- function Character.levelUp(c) ... end
--- function Character.syncFromUnit(c, unit) ... end
--- function Character.addSpell(c, spell) ... end
-
 return Character

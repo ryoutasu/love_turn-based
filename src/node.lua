@@ -263,55 +263,57 @@ function Node:draw()
         screenRadius = nodeRadius * mapRenderer.scale
     end
 
-    local released, hovered = UI.node("node_"..self.id, sx, sy, screenRadius, self.image, self.isDiscovered or DEBUG)
-    if released then
-        if self.isOpen then
-            if not self.isCompleted then
-                -- Сюжетный гейт. Раньше isLocked() нигде не вызывался,
-                -- поэтому запертые узлы (нужен ключ / unlock) проходились
-                -- как обычные. Теперь проверка обязательна.
-                local locked = self:isLocked(Levelmap.player)
+    if self.isDiscovered or DEBUG then
+        local released, hovered = UI.node("node_"..self.id, sx, sy, screenRadius, self.image, self.isDiscovered or DEBUG)
+        if released then
+            if self.isOpen then
+                if not self.isCompleted then
+                    -- Сюжетный гейт. Раньше isLocked() нигде не вызывался,
+                    -- поэтому запертые узлы (нужен ключ / unlock) проходились
+                    -- как обычные. Теперь проверка обязательна.
+                    local locked = self:isLocked(Levelmap.player)
 
-                -- Усталость: бой без бойцов не начинаем. Забег
-                -- закрывается тем же путём, что и после узла.
-                if self:isBlockedByFatigue(Levelmap.player) then
-                    PlaySound(ErrorSound, 0.4)
-                    Levelmap:_handle_party_exhausted(self)
-                    return
+                    -- Усталость: бой без бойцов не начинаем. Забег
+                    -- закрывается тем же путём, что и после узла.
+                    if self:isBlockedByFatigue(Levelmap.player) then
+                        PlaySound(ErrorSound, 0.4)
+                        Levelmap:_handle_party_exhausted(self)
+                        return
+                    end
+
+                    Levelmap.currentNode = self
+
+                    Gamestate.push(FadeInState, { color = { r = 1, g = 1, b = 1 }, time = 1, onFadeComplete = function()
+                        Levelmap.active = false
+                        -- Для сюжетного узла передаём признак запертости,
+                        -- чтобы сцена могла выбрать alt_when_locked.
+                        if self.story_scene then
+                            self._entered_locked = locked
+                        end
+                        Gamestate.push(self:getGamestate(), {
+                            player = Levelmap.player,
+                            node   = self,
+                            locked = locked,
+                        })
+                        Gamestate.push(FadeOutState, { color = { r = 1, g = 1, b = 1 }, time = 1 })
+                    end })
                 end
 
-                Levelmap.currentNode = self
-
-                Gamestate.push(FadeInState, { color = { r = 1, g = 1, b = 1 }, time = 1, onFadeComplete = function()
-                    Levelmap.active = false
-                    -- Для сюжетного узла передаём признак запертости,
-                    -- чтобы сцена могла выбрать alt_when_locked.
-                    if self.story_scene then
-                        self._entered_locked = locked
-                    end
-                    Gamestate.push(self:getGamestate(), {
-                        player = Levelmap.player,
-                        node   = self,
-                        locked = locked,
-                    })
-                    Gamestate.push(FadeOutState, { color = { r = 1, g = 1, b = 1 }, time = 1 })
-                end })
+                PlaySound(ButtonClickSound)
+            else
+                PlaySound(ErrorSound, 0.4)
             end
-
-            PlaySound(ButtonClickSound)
-        else
-            PlaySound(ErrorSound, 0.4)
         end
-    end
 
-    if hovered then
-        local text = labels[self.type] or "Undiscovered"
-        local w, h = labelFont:getWidth(text), labelFont:getHeight()
-        UI.setStyle({ })
-        UI.nextPosition("TOP")
-        UI.backdrop("node_backdrop_"..self.id, 0, -20, w + 16, h + 12, "BOTTOM")
-        UI.nextPosition("CENTER")
-        UI.text(0, 0, labels[self.type] or "Undiscovered", "CENTER", { 1, 1, 1, 1 }, labelFont)
+        if hovered then
+            local text = labels[self.type] or "Undiscovered"
+            local w, h = labelFont:getWidth(text), labelFont:getHeight()
+            UI.setStyle({ })
+            UI.nextPosition("TOP")
+            UI.backdrop("node_backdrop_"..self.id, 0, -20, w + 16, h + 12, "BOTTOM")
+            UI.nextPosition("CENTER")
+            UI.text(0, 0, labels[self.type] or "Undiscovered", "CENTER", { 1, 1, 1, 1 }, labelFont)
+        end
     end
 
     if DEBUG and self.story_scene then
