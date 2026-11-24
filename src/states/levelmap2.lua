@@ -13,6 +13,7 @@ local Path                  = MapRenderer.Path
 local StoryPlacement        = require 'src.story.story_placement'
 local PlayerMetaStory       = require 'src.player_meta_story'
 local MasterGenerator       = require 'data.story.generators.master_generator'
+local Fatigue               = require 'src.fatigue'
 
 local MAP_WIDTH      = 1200
 local MAP_HEIGHT     = 700
@@ -206,6 +207,15 @@ function Levelmap:_handle_story_node_complete(node)
     end
 
     if node.is_master_boss then
+        -- Партия без бойцов в бой не входит: исход был бы гарантированным
+        -- поражением. Проверка стоит до поиска мастера: без мастера ветка
+        -- иначе закрывает узел, и забег не закончился бы по правилу
+        -- истощения.
+        if not self:hasFighters() then
+            self:_handle_party_exhausted(node)
+            return
+        end
+
         local master = MasterGenerator.current(self.player.meta_story)
         if not master then
             -- Без мастера бой не собрать, но и узел не оставляем висеть.
@@ -272,6 +282,77 @@ function Levelmap:_handle_run_failed()
     self.currentNode = nil
     Gamestate.pop()
     if self.cancel_target_mode then self:cancel_target_mode() end
+end
+
+-- Партия истощена усталостью: все, кто может выйти в бой, достигли
+-- Fatigue.MAX. Это не поражение — жизни не тратятся, забег закрывается
+-- и игрок возвращается в Town, где усталость можно снять.
+function Levelmap:_handle_party_exhausted(node)
+    if node then
+        node.isCompleted = true
+    end
+
+    self.active      = false
+    self.currentNode = nil
+    if self.cancel_target_mode then self:cancel_target_mode() end
+
+    RunState:endRun()
+    self:_saveGame()
+
+    Gamestate.push(FadeInState, {
+        color = { r = 0, g = 0, b = 0 },
+        time  = 1,
+        onFadeComplete = function()
+            FieldMusic:stop()
+            -- switch, а не push: Levelmap не должен остаться под Town и
+            -- всплыть при следующем возврате из него.
+            Gamestate.switch(ExhaustionState, { player = self.player })
+        end,
+    })
+end
+
+-- Существует ли ещё кто-то, кто может выйти в бой. Используется как
+-- гейт перед запуском боя: без бойцов бой нельзя ни выиграть, ни сыграть.
+function Levelmap:hasFighters()
+    return Fatigue.hasFighter(self.player)
+end
+
+-- Ключ начисления для закрытого узла. Бой (и сюжетный бой с мастером)
+-- считается по исходу, всё остальное — по типу узла. Неизвестный тип
+-- трактуется как событие, а не как бесплатный узел: промах в маппинге
+-- должен быть заметен, а не молча обнулять начисление.
+function Levelmap:_fatigueKeyFor(node, result)
+    if node and node.story_scene then
+        if node.is_master_boss then return 'boss' end
+        return 'event'
+    end
+
+    local node_type = node and node.type
+    if node_type == 'wild' or node_type == 'trainer'
+    or node_type == 'start' or node_type == 'end' then
+        return result == 'lose' and 'lose' or 'win'
+    end
+
+    if node_type == 'shop' then return 'shop' end
+    if node_type == 'rest' then return 'rest' end
+    return 'event'
+end
+
+-- Единственная точка начисления усталости за узел. Вызывается ровно один
+-- раз — в момент закрытия узла (см. resume), поэтому повторные вызовы
+-- resume (возврат из модалок) усталость не дублируют.
+function Levelmap:_awardNodeFatigue(node, result)
+    if not node or node._fatigueAwarded then return end
+    node._fatigueAwarded = true
+
+    Fatigue.applyNode(self.player, self:_fatigueKeyFor(node, result))
+    self:_saveGame()
+
+    if Fatigue.isPartyExhausted(self.player) then
+        self:_handle_party_exhausted(node)
+        return true
+    end
+    return false
 end
 
 function Levelmap:leave()
@@ -488,30 +569,48 @@ function Levelmap:resume(from, args)
     -- нечего сохранять.
     if not self.currentNode then return end
 
-    self:openNeighborNodes(self.currentNode)
+    local node = self.currentNode
+
+    -- Возврат из фазы загрузки сейва: currentNode указывает на стартовый
+    -- узел, который никто не проходил. Ни закрывать его, ни начислять за
+    -- него усталость нельзя.
+    if node.isStartingNode then return end
+
+    -- Возврат из модалок (выбор существа, окно результата боя): узел уже
+    -- закрыт и усталость за него уже начислена. Раньше это было безвредно,
+    -- но с начислением по узлу повторный проход дублировал бы её.
+    if node.isCompleted then return end
+
+    self:openNeighborNodes(node)
 
     if from == BattleState then
         -- Бой с мастером: исход решают обработчики, узел закрывает только
         -- победа. Раньше узел отмечался пройденным здесь, до проверки
         -- результата.
-        if self.currentNode.is_master_boss then
+        if node.is_master_boss then
             if args.result == 'lose' then
-                self:_handle_master_defeat(self.currentNode)
+                self:_handle_master_defeat(node)
             else
-                self:_handle_master_victory(self.currentNode)
+                self:_handle_master_victory(node)
             end
+            -- Усталость за босса начисляется до return: ниже общий код не
+            -- достигается. Если после начисления партия истощена, забег уже
+            -- закрыт и currentNode обнулён.
+            if self:_awardNodeFatigue(node, args.result) then return end
+            if self.currentNode == node then self.currentNode = nil end
             return
         end
 
-        self.currentNode.isCompleted = true
+        node.isCompleted = true
 
         if args.result == 'lose' then
             self.player.lives = self.player.lives - 1
             if self.player.lives <= 0 then
+                self:_awardNodeFatigue(node, 'lose')
                 Gamestate.pop()
                 return
             end
-            self:_saveGame()
+            self:_awardNodeFatigue(node, args.result)
         else
             RunState:tickBattleModifiers()
             -- Сохраняем ПОСЛЕ выбора апгрейда, иначе при загрузке
@@ -519,32 +618,45 @@ function Levelmap:resume(from, args)
             UpgradeSelectScreen:open(self.player, nil, function()
                 self:_saveGame()
             end)
+            self:_awardNodeFatigue(node, args.result)
         end
 
     elseif from == RestState then
-        self.currentNode.isCompleted = true
+        node.isCompleted = true
         self:_saveGame()
+        self:_awardNodeFatigue(node, nil)
 
     elseif from == ShopState then
-        self.currentNode.isCompleted = true
+        node.isCompleted = true
         self:_saveGame()
+        self:_awardNodeFatigue(node, nil)
 
     elseif from == EventState then
         -- Сюжетный узел идёт через свой обработчик: он решает, закрыть узел
         -- и сдвинуть нить (обычная сцена) или запустить бой (босс мастера).
-        if self.currentNode.story_scene then
-            self:_handle_story_node_complete(self.currentNode)
+        if node.story_scene then
+            self:_handle_story_node_complete(node)
         else
-            self.currentNode.isCompleted = true
+            node.isCompleted = true
             self:_saveGame()
+        end
+        -- Босс мастера из _handle_story_node_complete уходит в бой: узел
+        -- не закрыт, усталость за него начислится по исходу боя.
+        if node.isCompleted then
+            self:_awardNodeFatigue(node, nil)
         end
 
     else
-        self.currentNode.isCompleted = true
+        node.isCompleted = true
         self:_saveGame()
+        self:_awardNodeFatigue(node, nil)
     end
 
-    self.currentNode = nil
+    -- Если начисление закрыло забег, currentNode уже обнулён внутри
+    -- _handle_party_exhausted — второй раз не трогаем.
+    if self.currentNode == node then
+        self.currentNode = nil
+    end
     self:cancel_target_mode()
 end
 

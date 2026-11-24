@@ -125,7 +125,11 @@ local function make_player()
     local p = {
         meta_story       = camp,
         lives            = 3,
-        charactersActive = {},
+        -- Routing suite, not a fatigue suite: a real party keeps the
+        -- exhaustion gate from ending the run before the battle.
+        charactersActiveSize = 1,
+        charactersActive = { { name = 'dummy', fatigue = 0 } },
+        charactersSpareSize  = 0,
         charactersSpare  = {},
         shards           = {},
         inventory        = {},

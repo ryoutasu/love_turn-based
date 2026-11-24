@@ -1,6 +1,7 @@
 local Sprite     = require 'src.sprite'
 local Characters = require 'src.characters'
 local Upgrades   = require 'data.upgrades'
+local Fatigue    = require 'src.fatigue'
 
 local Character = {}
 
@@ -18,6 +19,7 @@ function Character.new(template)
     c.energy = c.energy or c.max_energy
     c.level = c.level or 1
     c.exp = c.exp or 0
+    c.fatigue = Fatigue.clamp(c.fatigue or 0)
 
     c.sprite = Sprite(c.sprite_path, c.color)
     local w, h = c.sprite.w, c.sprite.h
@@ -68,6 +70,7 @@ function Character.serialize(c)
         element    = c.element,
         level      = c.level,
         exp        = c.exp,
+        fatigue    = Fatigue.clamp(c.fatigue or 0),
         _second_chance_available = c._second_chance_available,
         modifiers  = {},
         spells     = {},
@@ -121,6 +124,7 @@ function Character.deserialize(data)
     c.element    = data.element   or c.element
     c.level      = data.level     or 1
     c.exp        = data.exp       or 0
+    c.fatigue    = Fatigue.clamp(data.fatigue or 0)
     c._second_chance_available = data._second_chance_available
 
     -- Модификаторы: восстанавливаем filter/on_expire из Upgrades по source

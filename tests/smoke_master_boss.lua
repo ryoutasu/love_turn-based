@@ -201,7 +201,12 @@ local function make_player(camp)
     return {
         meta_story       = camp or fresh_campaign(),
         lives            = 3,
-        charactersActive = {},
+        -- These suites exercise story routing, not fatigue, so they carry a
+        -- real (non-exhausted) party. Otherwise the fatigue gate closes the
+        -- run before a battle can be handed off.
+        charactersActiveSize = 1,
+        charactersActive = { { name = 'dummy', fatigue = 0 } },
+        charactersSpareSize  = 0,
         charactersSpare  = {},
         shards           = {},
         inventory        = {},

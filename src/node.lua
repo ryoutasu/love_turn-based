@@ -1,5 +1,6 @@
 local sprite = require 'src.sprite'
 local RunState = require 'src.states.run_state'
+local Fatigue = require 'src.fatigue'
 
 local offset = 75
 
@@ -69,6 +70,15 @@ local node_gamestates = {
     ['end'] = BattleState
 }
 
+-- Node types that lead into BattleState. A combat node cannot be entered once
+-- the whole party is exhausted: the battle would start with no player units.
+local combat_types = {
+    ['start']   = true,
+    ['wild']    = true,
+    ['trainer'] = true,
+    ['end']     = true,
+}
+
 -- node types:
 -- start - wild, but easier
 -- wild
@@ -121,6 +131,15 @@ end
 
 function Node:getGamestate()
     return node_gamestates[self.type]
+end
+
+-- True if entering this node would start a battle with no deployable unit,
+-- i.e. every creature that can fight is exhausted.
+function Node:isBlockedByFatigue(player)
+    if not combat_types[self.type] and not self.is_master_boss then
+        return false
+    end
+    return not Fatigue.hasFighter(player)
 end
 
 -- True if this node cannot currently be entered due to its `requires` gate.
@@ -252,6 +271,14 @@ function Node:draw()
                 -- поэтому запертые узлы (нужен ключ / unlock) проходились
                 -- как обычные. Теперь проверка обязательна.
                 local locked = self:isLocked(Levelmap.player)
+
+                -- Усталость: бой без бойцов не начинаем. Забег
+                -- закрывается тем же путём, что и после узла.
+                if self:isBlockedByFatigue(Levelmap.player) then
+                    PlaySound(ErrorSound, 0.4)
+                    Levelmap:_handle_party_exhausted(self)
+                    return
+                end
 
                 Levelmap.currentNode = self
 

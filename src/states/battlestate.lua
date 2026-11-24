@@ -10,6 +10,7 @@ local Tween = require 'lib.tween'
 local Character = require 'src.character'
 local Characters = require 'src.characters'
 local Stats = require 'src.stats'
+local Fatigue = require 'src.fatigue'
 local RivalGenerator = require 'data.story.generators.rival_generator'
 local RunState = require 'src.states.run_state'
 
@@ -155,10 +156,11 @@ function BattleState:enter(from, args)
     self.master  = args.master
     self.enraged = args.enraged or false
 
-    -- Расстановка игроков (активные)
+    -- Расстановка игроков (активные). Истощённые (fatigue >= FATIGUE_MAX)
+    -- в бой не выходят: их место на карте не занимается.
     for i = 1, self.player.charactersActiveSize do
         local character = self.player.charactersActive[i]
-        if character then
+        if character and not Fatigue.isExhausted(character) then
             local tile
             if character.prepare_x and character.prepare_y then
                 tile = self.map:get_tile(character.prepare_x, character.prepare_y)
@@ -170,10 +172,11 @@ function BattleState:enter(from, args)
         end
     end
 
-    -- Расстановка запасных
+    -- Расстановка запасных. Истощённые запасные тоже не спавнятся: они не
+    -- дерутся, но занимали бы клетки и выглядели как бойцы.
     for i = 1, self.player.charactersSpareSize do
         local character = self.player.charactersSpare[i]
-        if character then
+        if character and not Fatigue.isExhausted(character) then
             local tile = self.map.tilesSpare[character.prepare_y]
             if not tile then
                 for _, t in ipairs(self.map.tilesSpare) do

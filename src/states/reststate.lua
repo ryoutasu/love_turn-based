@@ -1,5 +1,6 @@
 local Stats     = require 'src.stats'
 local RunState  = require 'src.states.run_state'
+local Fatigue   = require 'src.fatigue'
 
 local titleFont = love.graphics.newFont(40)
 local nameFont  = love.graphics.newFont(16)
@@ -48,6 +49,10 @@ function RestState:_healAll(kind, ratio)
 
     heal_list(self.player.charactersActive)
     heal_list(self.player.charactersSpare)
+
+    -- Отдых снимает усталость с отряда — иначе забег необратимо упирается
+    -- в правило истощения.
+    Fatigue.relieveParty(self.player, Fatigue.REST_RELIEF)
 
     self.rested   = true
     self.complete = true

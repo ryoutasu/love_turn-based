@@ -40,6 +40,7 @@ BattleState = require 'src.states.battlestate'
 RestState = require 'src.states.reststate'
 ShopState = require 'src.states.shopstate'
 EventState = require 'src.states.eventstate'
+ExhaustionState = require 'src.states.exhaustionstate'
 -- Level states (BattleState, EventState, etc.) before Levelmap state !!!
 Levelmap = require 'src.states.levelmap2'
 
